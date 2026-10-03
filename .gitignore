@@ -5,4 +5,4 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 design-system/
-test.csv
+male_players.csv

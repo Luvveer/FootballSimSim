@@ -66,7 +66,7 @@ export function parsePlayers(csv: string): PlayerRecord[] {
 
 export function defaultCsvPath(): string {
   const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
-  return path.resolve(moduleDirectory, "../../../../test.csv");
+  return path.resolve(moduleDirectory, "../../../../male_players.csv");
 }
 
 export class PlayerRepository {

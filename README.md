@@ -4,7 +4,88 @@ FootballSimSim is a StormHacks 2026 project about the football teams people argu
 
 The core rule is simple: a player and a FIFA version form one historical player identity. Lionel Messi in FIFA 15, FIFA 18, and FIFA 22 are three selectable versions with different attributes. We should preserve that distinction throughout player search, team building, simulation, statistics, and presentation.
 
-This document is the plan. No implementation has started yet.
+The first working prototype is implemented. The repository contains the web app, API, shared TypeScript contracts, simulation engine, and automated tests.
+
+## Local setup
+
+### Prerequisites
+
+Install the following before starting:
+
+- Node.js 20 or newer
+- npm, which is included with Node.js
+- A local copy of the FIFA subset named `test.csv`
+
+`test.csv` is intentionally ignored by Git. Ask another team member for the current file and place it at the repository root:
+
+```text
+FootballSimSim/
+  test.csv
+```
+
+Do not remove columns from the CSV. The API reads the original headers and expects, at minimum, player identity, FIFA version, position, and rating fields. The current fixture contains 10 records, including two goalkeepers.
+
+### Install dependencies
+
+From the repository root, run:
+
+```bash
+npm install
+```
+
+This installs every npm workspace, including the frontend, API, shared contracts, and simulation engine. No environment file is needed for local development.
+
+### Run the application
+
+The frontend and API run as separate development processes. Open two terminals at the repository root.
+
+Terminal 1 starts the API:
+
+```bash
+npm run dev:api
+```
+
+The API will be available at `http://localhost:3001`. Check it with:
+
+```bash
+curl http://localhost:3001/health
+```
+
+Terminal 2 starts the web app:
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:5173` in a browser. Vite forwards requests beginning with `/api` to the local Fastify server, so both development processes must be running to use the real player data and match engine. The frontend has demo fallback data, but that fallback should not be used to verify backend work.
+
+### Verify your changes
+
+Run these commands from the repository root before handing work to another teammate:
+
+```bash
+npm test
+npm run typecheck
+npm run build
+```
+
+- `npm test` runs the API and simulation tests.
+- `npm run typecheck` checks the TypeScript workspace packages.
+- `npm run build` creates production builds in dependency order.
+
+The compiled frontend is written to `apps/web/dist`. The compiled API and internal packages write to their own `dist` directories. Build output and installed dependencies are ignored by Git.
+
+### Useful development URLs
+
+| Service | URL |
+| --- | --- |
+| Web app | `http://localhost:5173` |
+| API health check | `http://localhost:3001/health` |
+| Player search | `http://localhost:3001/players` |
+| Available FIFA versions | `http://localhost:3001/players/versions` |
+| Match simulation | `POST http://localhost:3001/matches/simulate` |
+
+If the API fails during startup, first confirm that `test.csv` exists at the repository root and still has its header row. If the web app shows fallback players, confirm that the API is running on port 3001, then reload the page.
 
 ## What we are building
 
@@ -79,8 +160,7 @@ apps/
 packages/
   shared/          contracts used by the browser, API, and engine
   simulation/      deterministic football logic with no UI dependencies
-data/
-  test.csv         untouched source fixture
+test.csv           untouched local source fixture, ignored by Git
 ```
 
 The approved stack is React with Vite for the web app and Node.js with Fastify for the API. Shared contracts and the simulation engine are separate TypeScript workspace packages.

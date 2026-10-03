@@ -16,16 +16,27 @@ const mapPlayer = (raw: Record<string, unknown>, index: number): Player => ({
   physical: Number(raw.physical ?? raw.phy ?? raw.physic ?? (raw.attributes as Record<string,unknown>)?.physical ?? 0), image: typeof raw.image === 'string' ? raw.image : undefined,
 })
 
-export async function fetchPlayers(query = '', position = 'ALL', signal?: AbortSignal): Promise<Player[]> {
-  const params = new URLSearchParams({ limit: '100' })
+export interface PlayerPage {
+  players: Player[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export async function fetchPlayers(query = '', position = 'ALL', offset = 0, signal?: AbortSignal): Promise<PlayerPage> {
+  const params = new URLSearchParams({ limit: '40', offset: String(offset) })
   if (query.trim()) params.set('q', query.trim())
   if (position !== 'ALL') params.set('position', position)
   const response = await fetch(`/api/players?${params}`, { signal })
   if (!response.ok) throw new Error('Could not load players from the API.')
-  const body = await response.json() as { players?: Record<string, unknown>[] }
+  const body = await response.json() as { players?: Record<string, unknown>[]; total?: number; limit?: number; offset?: number }
   if (!Array.isArray(body.players)) throw new Error('The player response is invalid.')
-  if (body.players.length === 0) throw new Error('The player dataset is empty.')
-  return body.players.map(mapPlayer)
+  return {
+    players: body.players.map(mapPlayer),
+    total: Number(body.total ?? 0),
+    limit: Number(body.limit ?? 40),
+    offset: Number(body.offset ?? offset),
+  }
 }
 
 const selected = (lineup: Lineup) => Object.entries(lineup).map(([slotId, player]) => ({

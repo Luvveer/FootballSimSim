@@ -43,6 +43,13 @@ describe("API routes", () => {
     expect(response.json()).toMatchObject({ total: 1, players: [{ player_id: "1" }] });
   });
 
+  it("paginates players without changing the total", async () => {
+    const response = await app.inject({ method: "GET", url: "/players?limit=2&offset=2" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ total: 5, limit: 2, offset: 2 });
+    expect(response.json().players).toHaveLength(2);
+  });
+
   it("simulates a valid five-a-side match", async () => {
     const response = await app.inject({ method: "POST", url: "/matches/simulate", payload: matchBody });
     expect(response.statusCode).toBe(200);

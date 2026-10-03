@@ -107,6 +107,14 @@ The compiled frontend is written to `apps/web/dist`. The compiled API and intern
 
 If the API fails during startup, first confirm that `test.csv` exists at the repository root and still has its header row. If the web app shows fallback players, confirm that the API is running on port 3001, then reload the page.
 
+### Large dataset behavior
+
+The same loader supports the current 10-row fixture and the intended dataset of roughly 180,000 rows. The API reads the CSV once at startup, preserves every column, builds indexed historical-player lookups, and precomputes searchable names, clubs, nationalities, versions, and positions.
+
+The player browser requests 40 records at a time. Search and position filters run on the API, and the Load more button requests the next page using `limit` and `offset`. The browser never downloads the full dataset.
+
+This is an in-memory prototype, so API startup and memory use will grow with the CSV. A synthetic 180,000-row load is part of the development verification process. Moving the full dataset into a database remains a later decision, not a requirement for running the simulator.
+
 ## What we are building
 
 A user will be able to:

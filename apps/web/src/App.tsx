@@ -9,6 +9,7 @@ const emptyLineup = (): Lineup => ({ ST:null, LM:null, RM:null, CAM:null, GK:nul
 export function App() {
   const [view, setView] = useState<'builder'|'match'|'result'>('builder')
   const [players, setPlayers] = useState<Player[]>([])
+  const [playerTotal, setPlayerTotal] = useState(0)
   const [home, setHome] = useState<Lineup>(emptyLineup)
   const [away, setAway] = useState<Lineup>(emptyLineup)
   const [activeSide, setActiveSide] = useState<Side>('home')
@@ -18,6 +19,7 @@ export function App() {
   const [result, setResult] = useState<MatchResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [playersLoading, setPlayersLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [playerError, setPlayerError] = useState<string | null>(null)
   const [matchError, setMatchError] = useState<string | null>(null)
   const [reloadPlayers, setReloadPlayers] = useState(0)
@@ -28,7 +30,9 @@ export function App() {
       setPlayersLoading(true)
       setPlayerError(null)
       try {
-        setPlayers(await fetchPlayers(query, position, controller.signal))
+        const page = await fetchPlayers(query, position, 0, controller.signal)
+        setPlayers(page.players)
+        setPlayerTotal(page.total)
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') return
         setPlayers([])
@@ -39,6 +43,21 @@ export function App() {
     }, query ? 250 : 0)
     return () => { window.clearTimeout(timer); controller.abort() }
   }, [query, position, reloadPlayers])
+
+  const loadMorePlayers = async () => {
+    if (loadingMore || players.length >= playerTotal) return
+    setLoadingMore(true)
+    setPlayerError(null)
+    try {
+      const page = await fetchPlayers(query, position, players.length)
+      setPlayers(current => [...current, ...page.players])
+      setPlayerTotal(page.total)
+    } catch (error) {
+      setPlayerError(error instanceof Error ? error.message : 'Could not load more players.')
+    } finally {
+      setLoadingMore(false)
+    }
+  }
   const ready = Object.values(home).every(Boolean) && Object.values(away).every(Boolean)
   const filled = Object.values(home).filter(Boolean).length + Object.values(away).filter(Boolean).length
 
@@ -83,7 +102,7 @@ export function App() {
 
       <div className="builder-grid">
         <div className="team-column"><TeamHeader side="home" active={activeSide==='home'} onClick={() => setActiveSide('home')} /><Pitch side="home" lineup={home} activeSlot={activeSide==='home' ? activeSlot : null} onSlot={setActiveSlot} onRemove={slot => setHome({...home,[slot]:null})} onActivate={() => setActiveSide('home')} /></div>
-        <PlayerBrowser players={players} query={query} setQuery={setQuery} position={position} setPosition={setPosition} activeSide={activeSide} activeSlot={activeSlot} lineup={activeSide==='home'?home:away} onSelect={selectPlayer} />
+        <PlayerBrowser players={players} total={playerTotal} loadingMore={loadingMore} onLoadMore={loadMorePlayers} query={query} setQuery={setQuery} position={position} setPosition={setPosition} activeSide={activeSide} activeSlot={activeSlot} lineup={activeSide==='home'?home:away} onSelect={selectPlayer} />
         <div className="team-column"><TeamHeader side="away" active={activeSide==='away'} onClick={() => setActiveSide('away')} /><Pitch side="away" lineup={away} activeSlot={activeSide==='away' ? activeSlot : null} onSlot={setActiveSlot} onRemove={slot => setAway({...away,[slot]:null})} onActivate={() => setActiveSide('away')} /></div>
       </div>
     </main>
@@ -111,14 +130,14 @@ function Pitch({ side,lineup,activeSlot,onSlot,onRemove,onActivate }:{side:Side;
   </div>
 }
 
-function PlayerBrowser({players,query,setQuery,position,setPosition,activeSide,activeSlot,lineup,onSelect}:{players:Player[];query:string;setQuery:(q:string)=>void;position:string;setPosition:(position:string)=>void;activeSide:Side;activeSlot:Slot;lineup:Lineup;onSelect:(p:Player)=>void}) {
+function PlayerBrowser({players,total,loadingMore,onLoadMore,query,setQuery,position,setPosition,activeSide,activeSlot,lineup,onSelect}:{players:Player[];total:number;loadingMore:boolean;onLoadMore:()=>void;query:string;setQuery:(q:string)=>void;position:string;setPosition:(position:string)=>void;activeSide:Side;activeSlot:Slot;lineup:Lineup;onSelect:(p:Player)=>void}) {
   return <section className="player-browser" aria-label="Player selection">
-    <div className="browser-title"><div><p className="eyebrow">Player library</p><h2>Choose for <span>{activeSide==='home'?'Crimson':'Ivory'} · {activeSlot}</span></h2></div><span className="count">{players.length} players</span></div>
+    <div className="browser-title"><div><p className="eyebrow">Player library</p><h2>Choose for <span>{activeSide==='home'?'Crimson':'Ivory'} · {activeSlot}</span></h2></div><span className="count">{players.length} of {total}</span></div>
     <label className="search-box"><Search size={18}/><span className="sr-only">Search players</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search player, club, or year…"/></label>
     <div className="filter-row" role="group" aria-label="Filter by position">{['ALL','GK','CB','CM','CAM','LW','RW','ST'].map(p=><button className={position===p?'active':''} onClick={()=>setPosition(p)} key={p}>{p}</button>)}</div>
     <div className="player-list">{players.length ? players.map(player => { const used=Object.values(lineup).some(p=>p?.id===player.id); return <button className="player-card" key={player.id} disabled={used} onClick={()=>onSelect(player)}>
       <span className="card-rating"><b>{player.rating}</b><small>{player.position}</small></span><span className="card-avatar">{initials(player.name)}</span><span className="card-identity"><b>{player.name}</b><small>{player.club} · {player.nationality}</small><span>{player.version}</span></span><span className="mini-stats"><small><b>{player.pace}</b>PAC</small><small><b>{player.shooting}</b>SHO</small><small><b>{player.passing}</b>PAS</small></span><span className="add-player">{used?<Check size={16}/>:<span>+</span>}</span>
-    </button>}) : <div className="empty-search"><Search size={26}/><b>No players found</b><span>Try a name, club, or a different position.</span></div>}</div>
+    </button>}) : <div className="empty-search"><Search size={26}/><b>No players found</b><span>Try a name, club, or a different position.</span></div>}{players.length < total && <button className="load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? 'Loading…' : `Load more (${total-players.length} remaining)`}</button>}</div>
     <div className="browser-foot"><span><Sparkles size={15}/> Historical versions are rated independently</span><button onClick={()=>{setQuery('');setPosition('ALL')}}>Clear filters</button></div>
   </section>
 }

@@ -31,13 +31,16 @@ From the repository root, run:
 
 ```bash
 npm install
+npm run build
 ```
 
-This installs every npm workspace, including the frontend, API, shared contracts, and simulation engine. No environment file is needed for local development.
+`npm install` installs every workspace, including the frontend, API, shared contracts, and simulation engine. `npm run build` then creates the generated `dist` files used by the workspace imports.
+
+The initial build is required on a fresh clone. The API imports `@footballsimsim/shared` and `@footballsimsim/simulation` from their compiled output, and those `dist` directories are not stored in Git. Without the build, `npm run dev:api` can fail because it cannot resolve those packages. No environment file is needed for local development.
 
 ### Run the application
 
-The frontend and API run as separate development processes. Open two terminals at the repository root.
+After `npm run build` finishes successfully, the frontend and API run as separate development processes. Open two terminals at the repository root.
 
 Terminal 1 starts the API:
 
@@ -58,6 +61,23 @@ npm run dev
 ```
 
 Open `http://localhost:5173` in a browser. Vite forwards requests beginning with `/api` to the local Fastify server, so both development processes must be running to use the real player data and match engine. The frontend has demo fallback data, but that fallback should not be used to verify backend work.
+
+The complete first-time setup order is:
+
+```bash
+npm install
+npm run build
+```
+
+Then keep these running in separate terminals:
+
+```bash
+npm run dev:api
+```
+
+```bash
+npm run dev
+```
 
 ### Verify your changes
 

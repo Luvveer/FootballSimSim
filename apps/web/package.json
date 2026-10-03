@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@footballsimsim/shared": "*",
     "@vitejs/plugin-react": "latest",
     "vite": "latest",
     "typescript": "latest",

@@ -92,7 +92,14 @@ export class PlayerRepository {
     const needle = query.trim().toLocaleLowerCase();
     const wantedPosition = position?.trim().toLocaleUpperCase();
     const matching = this.records.filter((player) => {
-      const nameMatches = !needle || `${player.short_name} ${player.long_name}`.toLocaleLowerCase().includes(needle);
+      const searchable = [
+        player.short_name,
+        player.long_name,
+        player.club_name,
+        player.nationality_name,
+        player.fifa_version,
+      ].join(" ").toLocaleLowerCase();
+      const nameMatches = !needle || searchable.includes(needle);
       const versionMatches = !version || player.fifa_version === version;
       const positions = player.player_positions.split(",").map((item) => item.trim().toLocaleUpperCase());
       return nameMatches && versionMatches && (!wantedPosition || positions.includes(wantedPosition));

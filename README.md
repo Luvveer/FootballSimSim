@@ -23,7 +23,19 @@ FootballSimSim/
   male_players.csv
 ```
 
-Do not remove columns from the CSV. The API reads the original headers and expects, at minimum, player identity, FIFA version, position, and rating fields. The current fixture contains 10 records, including two goalkeepers.
+Keep the source CSV unchanged. To generate a smaller, normalized local artifact from `male_players.csv`, run:
+
+```bash
+npm run data:prepare
+```
+
+This writes `players.csv` at the repository root. Both the raw and compact datasets are ignored by Git. The preparation step keeps one row per `player_id + fifa_version` (the highest `fifa_update`, then latest `update_as_of`), normalizes source positions to `GK`, `DEF`, `MID`, and `FWD`, and retains only fields used by the application. You can also provide explicit paths after `--`:
+
+```bash
+npm run data:prepare -- path/to/input.csv path/to/output.csv
+```
+
+The API still reads the original dataset in this revision; switching the runtime loader to `players.csv` is a separate change. The current fixture contains 10 records, including two goalkeepers.
 
 ### Install dependencies
 
@@ -110,7 +122,9 @@ If the API fails during startup, first confirm that `test.csv` exists at the rep
 
 ### Large dataset behavior
 
-The same loader supports the current 10-row fixture and the intended dataset of roughly 180,000 rows. The API reads the CSV once at startup, preserves every column, builds indexed historical-player lookups, and precomputes searchable names, clubs, nationalities, versions, and positions.
+The same loader supports the current 10-row fixture and the intended dataset of roughly 180,000 rows. The API currently reads the raw CSV once at startup, preserves every column, builds indexed historical-player lookups, and precomputes searchable names, clubs, nationalities, versions, and positions.
+
+`npm run data:prepare` creates a 33-column compact artifact containing identity, display/search fields, normalized roles, and the attributes currently consumed by the simulation. It deliberately omits unused source metadata and `movement_acceleration`. The raw file is never modified.
 
 The player browser requests 40 records at a time. Search and position filters run on the API, and the Load more button requests the next page using `limit` and `offset`. The browser never downloads the full dataset.
 
@@ -140,12 +154,12 @@ The first version is a web demo built for judges to understand within a minute. 
 
 For now:
 
-- Keep every original column.
-- Do not clean, reshape, or reduce the dataset.
+- Keep the downloaded source dataset unchanged.
+- Generate `players.csv` when a compact local artifact is needed; do not commit either dataset.
 - Load data locally from CSV or an in-memory representation derived from it.
 - Do not introduce a production database before the match engine works.
 - Treat `player_id + fifa_version` as the provisional historical identity.
-- Confirm how `fifa_update` should affect identity if the full dataset contains several updates for one player and FIFA version.
+- Within a `player_id + fifa_version`, select the highest numeric `fifa_update`, then the latest `update_as_of` when updates tie.
 
 The intended historical range is FIFA 15 through FIFA 23.
 

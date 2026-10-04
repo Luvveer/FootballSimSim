@@ -40,7 +40,7 @@ export function toHistoricalPlayer(record: PlayerRecord): HistoricalPlayer {
     playerId: record.player_id,
     fifaVersion: record.fifa_version,
     fifaUpdate: record.fifa_update,
-    name: record.long_name || record.short_name,
+    name: record.short_name,
     shortName: record.short_name,
     positions: record.player_positions.split(",").map((position) => position.trim()).filter(Boolean),
     overall: number(record, "overall"),

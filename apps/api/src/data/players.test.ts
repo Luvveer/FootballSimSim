@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parsePlayers } from "./players.js";
 
-const header = "player_id,fifa_version,fifa_update,update_as_of,short_name,long_name,player_positions,overall,club_name,nationality_name";
+const header = "player_id,fifa_version,fifa_update,update_as_of,short_name,short_name,player_positions,overall,club_name,nationality_name";
 
 describe("player data", () => {
   it("preserves source columns and quoted commas", () => {
@@ -19,6 +19,6 @@ describe("player data", () => {
       "1,21,1,2021-01-01,A,Other version,GK,84,Club,Country",
     ].join("\n"));
     expect(players).toHaveLength(2);
-    expect(players.find((player) => player.fifa_version === "20")?.long_name).toBe("Newest");
+    expect(players.find((player) => player.fifa_version === "20")?.short_name).toBe("Newest");
   });
 });

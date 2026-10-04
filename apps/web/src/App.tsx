@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, ChevronDown, CircleDot, Gauge, Play, RotateCcw, Search, Shield, Sparkles, Trophy, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, Check, ChevronDown, CircleDot, Gauge, Pencil, Play, RotateCcw, Search, Shield, Sparkles, Trophy, X } from 'lucide-react'
 import { fetchPlayers, simulateMatch } from './api'
 import type { Lineup, MatchEvent, MatchResult, Player, Side, Slot } from './types'
 
@@ -18,46 +18,10 @@ export function App() {
   const [position, setPosition] = useState('ALL')
   const [result, setResult] = useState<MatchResult | null>(null)
   const [loading, setLoading] = useState(false)
-  const [playersLoading, setPlayersLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [playerError, setPlayerError] = useState<string | null>(null)
-  const [matchError, setMatchError] = useState<string | null>(null)
-  const [reloadPlayers, setReloadPlayers] = useState(0)
+  const [homeName, setHomeName] = useState('Home Team')
+  const [awayName, setAwayName] = useState('Away Team')
 
-  useEffect(() => {
-    const controller = new AbortController()
-    const timer = window.setTimeout(async () => {
-      setPlayersLoading(true)
-      setPlayerError(null)
-      try {
-        const page = await fetchPlayers(query, position, 0, controller.signal)
-        setPlayers(page.players)
-        setPlayerTotal(page.total)
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        setPlayers([])
-        setPlayerError(error instanceof Error ? error.message : 'Could not load players.')
-      } finally {
-        if (!controller.signal.aborted) setPlayersLoading(false)
-      }
-    }, query ? 250 : 0)
-    return () => { window.clearTimeout(timer); controller.abort() }
-  }, [query, position, reloadPlayers])
-
-  const loadMorePlayers = async () => {
-    if (loadingMore || players.length >= playerTotal) return
-    setLoadingMore(true)
-    setPlayerError(null)
-    try {
-      const page = await fetchPlayers(query, position, players.length)
-      setPlayers(current => [...current, ...page.players])
-      setPlayerTotal(page.total)
-    } catch (error) {
-      setPlayerError(error instanceof Error ? error.message : 'Could not load more players.')
-    } finally {
-      setLoadingMore(false)
-    }
-  }
+  useEffect(() => { fetchPlayers().then(setPlayers) }, [])
   const ready = Object.values(home).every(Boolean) && Object.values(away).every(Boolean)
   const filled = Object.values(home).filter(Boolean).length + Object.values(away).filter(Boolean).length
 
@@ -73,16 +37,8 @@ export function App() {
   const start = async () => {
     if (!ready) return
     setLoading(true)
-    setMatchError(null)
-    try {
-      const match = await simulateMatch('Crimson FC', 'Ivory United', home, away)
-      setResult(match)
-      setView('match')
-    } catch (error) {
-      setMatchError(error instanceof Error ? error.message : 'The match could not be started.')
-    } finally {
-      setLoading(false)
-    }
+    const match = await simulateMatch(homeName.trim() || 'Home', awayName.trim() || 'Away', home, away)
+    setResult(match); setLoading(false); setView('match')
   }
 
   if (view === 'match' && result) return <MatchReplay result={result} onComplete={() => setView('result')} />
@@ -101,9 +57,9 @@ export function App() {
       {matchError && <div className="status-banner error" role="alert"><span>{matchError}</span><button onClick={() => void start()}>Try match again</button></div>}
 
       <div className="builder-grid">
-        <div className="team-column"><TeamHeader side="home" active={activeSide==='home'} onClick={() => setActiveSide('home')} /><Pitch side="home" lineup={home} activeSlot={activeSide==='home' ? activeSlot : null} onSlot={setActiveSlot} onRemove={slot => setHome({...home,[slot]:null})} onActivate={() => setActiveSide('home')} /></div>
-        <PlayerBrowser players={players} total={playerTotal} loadingMore={loadingMore} onLoadMore={loadMorePlayers} query={query} setQuery={setQuery} position={position} setPosition={setPosition} activeSide={activeSide} activeSlot={activeSlot} lineup={activeSide==='home'?home:away} onSelect={selectPlayer} />
-        <div className="team-column"><TeamHeader side="away" active={activeSide==='away'} onClick={() => setActiveSide('away')} /><Pitch side="away" lineup={away} activeSlot={activeSide==='away' ? activeSlot : null} onSlot={setActiveSlot} onRemove={slot => setAway({...away,[slot]:null})} onActivate={() => setActiveSide('away')} /></div>
+        <div className="team-column"><TeamHeader side="home" name={homeName} setName={setHomeName} active={activeSide==='home'} onClick={() => setActiveSide('home')} /><Pitch side="home" lineup={home} activeSlot={activeSide==='home' ? activeSlot : null} onSlot={setActiveSlot} onRemove={slot => setHome({...home,[slot]:null})} onActivate={() => setActiveSide('home')} /></div>
+        <PlayerBrowser activeName={activeSide==='home'?homeName:awayName} players={players} query={query} setQuery={setQuery} activeSide={activeSide} activeSlot={activeSlot} lineup={activeSide==='home'?home:away} onSelect={selectPlayer} />
+        <div className="team-column"><TeamHeader side="away" name={awayName} setName={setAwayName} active={activeSide==='away'} onClick={() => setActiveSide('away')} /><Pitch side="away" lineup={away} activeSlot={activeSide==='away' ? activeSlot : null} onSlot={setActiveSlot} onRemove={slot => setAway({...away,[slot]:null})} onActivate={() => setActiveSide('away')} /></div>
       </div>
     </main>
     <footer className="action-bar"><div><b>{ready ? 'Both teams are ready' : `${10-filled} spots left to fill`}</b><span>{ready ? 'Your 60-second match is ready to kick off.' : 'Pick a position on either pitch, then choose a player.'}</span></div><button className="start-button" disabled={!ready || loading} onClick={start}>{loading ? <span className="spinner"/> : <Play size={19} fill="currentColor"/>}{loading ? 'Building match…' : 'Start match'}</button></footer>
@@ -114,8 +70,19 @@ function Header({ step }:{ step:'build'|'match'|'result' }) {
   return <header className="topbar"><a className="brand" href="#" aria-label="FootballSimSim home"><span className="brand-mark"><CircleDot size={22}/></span><span>FOOTBALL<span>SIM</span>SIM</span></a><nav aria-label="Match progress"><span className={step==='build'?'current':''}>01 Build</span><i/><span className={step==='match'?'current':''}>02 Match</span><i/><span className={step==='result'?'current':''}>03 Results</span></nav><div className="format"><Gauge size={16}/><span>5v5 · 60 sec</span></div></header>
 }
 
-function TeamHeader({side,active,onClick}:{side:Side;active:boolean;onClick:()=>void}) {
-  return <button className={`team-header ${side} ${active?'active':''}`} onClick={onClick}><span className="team-badge"><Shield size={22}/></span><span><small>{side==='home'?'Home team':'Away team'}</small><b>{side==='home'?'Crimson FC':'Ivory United'}</b></span>{active && <span className="editing"><span/> editing</span>}</button>
+function TeamHeader({side,name,setName,active,onClick}:{side:Side;name:string;setName:(n:string)=>void;active:boolean;onClick:()=>void}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(name)
+  const save = () => { const next = draft.trim(); if (next) setName(next); setEditing(false) }
+  const startEdit = () => { setDraft(name); setEditing(true) }
+  return <div className={`team-header ${side} ${active?'active':''}`} onClick={onClick}><span className="team-badge"><Shield size={22}/></span><span><small>{side==='home'?'Home team':'Away team'}</small>
+    <span className="name-row">
+      {editing
+        ? <input className="team-name-input" autoFocus onFocus={e=>e.target.select()} value={draft} maxLength={24} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') save(); if(e.key==='Escape') setEditing(false) }} aria-label={`${side==='home'?'Home':'Away'} team name`}/>
+        : <b>{name}</b>}
+      <button className="name-edit-btn" aria-label={editing?'Save team name':'Edit team name'} onClick={e=>{ e.stopPropagation(); editing ? save() : startEdit() }}>{editing ? <Check size={16}/> : <Pencil size={14}/>}</button>
+    </span>
+  </span>{active && <span className="editing"><span/> editing</span>}</div>
 }
 
 function Pitch({ side,lineup,activeSlot,onSlot,onRemove,onActivate }:{side:Side;lineup:Lineup;activeSlot:Slot|null;onSlot:(s:Slot)=>void;onRemove:(s:Slot)=>void;onActivate:()=>void}) {
@@ -130,12 +97,14 @@ function Pitch({ side,lineup,activeSlot,onSlot,onRemove,onActivate }:{side:Side;
   </div>
 }
 
-function PlayerBrowser({players,total,loadingMore,onLoadMore,query,setQuery,position,setPosition,activeSide,activeSlot,lineup,onSelect}:{players:Player[];total:number;loadingMore:boolean;onLoadMore:()=>void;query:string;setQuery:(q:string)=>void;position:string;setPosition:(position:string)=>void;activeSide:Side;activeSlot:Slot;lineup:Lineup;onSelect:(p:Player)=>void}) {
+function PlayerBrowser({activeName,players,query,setQuery,activeSide,activeSlot,lineup,onSelect}:{activeName:string;players:Player[];query:string;setQuery:(q:string)=>void;activeSide:Side;activeSlot:Slot;lineup:Lineup;onSelect:(p:Player)=>void}) {
+  const [position, setPosition] = useState('ALL')
+  const filtered = useMemo(() => players.filter(p => (position==='ALL'||p.position===position) && `${p.name} ${p.club} ${p.version}`.toLowerCase().includes(query.toLowerCase())), [players,query,position])
   return <section className="player-browser" aria-label="Player selection">
-    <div className="browser-title"><div><p className="eyebrow">Player library</p><h2>Choose for <span>{activeSide==='home'?'Crimson':'Ivory'} · {activeSlot}</span></h2></div><span className="count">{players.length} of {total}</span></div>
-    <label className="search-box"><Search size={18}/><span className="sr-only">Search players</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search player, club, or year…"/></label>
+    <div className="browser-title"><div><p className="eyebrow">Player library</p><h2>Choose for <span>{activeName} · {activeSlot}</span></h2></div><span className="count">{filtered.length} players</span></div>
+    <label className="search-box"><Search size={18}/><span className="sr-only">Search players</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search player, club, or year…"/><kbd>⌘ K</kbd></label>
     <div className="filter-row" role="group" aria-label="Filter by position">{['ALL','GK','CB','CM','CAM','LW','RW','ST'].map(p=><button className={position===p?'active':''} onClick={()=>setPosition(p)} key={p}>{p}</button>)}</div>
-    <div className="player-list">{players.length ? players.map(player => { const used=Object.values(lineup).some(p=>p?.id===player.id); return <button className="player-card" key={player.id} disabled={used} onClick={()=>onSelect(player)}>
+    <div className="player-list">{filtered.length ? filtered.map(player => { const used=Object.values(lineup).some(p=>p?.id===player.id); return <button className="player-card" title={player.fullName ?? player.name} key={player.id} disabled={used} onClick={()=>onSelect(player)}>
       <span className="card-rating"><b>{player.rating}</b><small>{player.position}</small></span><span className="card-avatar">{initials(player.name)}</span><span className="card-identity"><b>{player.name}</b><small>{player.club} · {player.nationality}</small><span>{player.version}</span></span><span className="mini-stats"><small><b>{player.pace}</b>PAC</small><small><b>{player.shooting}</b>SHO</small><small><b>{player.passing}</b>PAS</small></span><span className="add-player">{used?<Check size={16}/>:<span>+</span>}</span>
     </button>}) : <div className="empty-search"><Search size={26}/><b>No players found</b><span>Try a name, club, or a different position.</span></div>}{players.length < total && <button className="load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? 'Loading…' : `Load more (${total-players.length} remaining)`}</button>}</div>
     <div className="browser-foot"><span><Sparkles size={15}/> Historical versions are rated independently</span><button onClick={()=>{setQuery('');setPosition('ALL')}}>Clear filters</button></div>

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+.DS_Store
+design-system/
+male_players.csv
+test.csv

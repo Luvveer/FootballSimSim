@@ -1,0 +1,19 @@
+{
+  "name": "footballsimsim",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @footballsimsim/shared && npm run build --workspace @footballsimsim/simulation && npm run build --workspace @footballsimsim/api && npm run build --workspace @footballsimsim/web",
+    "dev": "npm run dev --workspace @footballsimsim/web",
+    "dev:api": "npm run dev --workspace @footballsimsim/api",
+    "test": "npm run build --workspace @footballsimsim/shared && npm run build --workspace @footballsimsim/simulation && npm run test --workspaces --if-present",
+    "typecheck": "npm run build --workspace @footballsimsim/shared && npm run build --workspace @footballsimsim/simulation && npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

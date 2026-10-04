@@ -1,6 +1,6 @@
 import type { HistoricalPlayer, MatchConfig, PitchRole, Team } from "@footballsimsim/shared";
-import { isPitchRole, normalizePositions, TEAM_SIZE } from "@footballsimsim/shared";
-import type { PlayerRecord, PlayerRepository } from "./data/players.js";
+import { isPitchRole, TEAM_SIZE } from "@footballsimsim/shared";
+import { playerRoles, type PlayerRecord, type PlayerRepository } from "./data/players.js";
 
 interface LineupSelection {
   slotId?: unknown;
@@ -46,10 +46,9 @@ export function toHistoricalPlayer(record: PlayerRecord): HistoricalPlayer {
     id: `${record.player_id}:${record.fifa_version}`,
     playerId: record.player_id,
     fifaVersion: record.fifa_version,
-    fifaUpdate: record.fifa_update,
     name: record.long_name || record.short_name,
     shortName: record.short_name,
-    positions: normalizePositions(record.player_positions),
+    positions: playerRoles(record),
     overall: requiredNumber(record, "overall"),
     club: record.club_name || undefined,
     nationality: record.nationality_name || undefined,

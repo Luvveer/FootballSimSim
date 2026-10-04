@@ -16,7 +16,7 @@ Install the following before starting:
 - npm, which is included with Node.js
 - A local FIFA dataset named `male_players.csv`, or the smaller `test.csv` fixture
 
-Both dataset filenames are intentionally ignored by Git. Ask another team member for the current file and place it at the repository root. The API prefers `male_players.csv` and falls back to `test.csv`:
+The dataset files are intentionally ignored by Git. Ask another team member for the current file and place it at the repository root. The API loads the generated `players.csv` for the full dataset, or `test.csv` when neither full-dataset file is present:
 
 ```text
 FootballSimSim/
@@ -35,7 +35,7 @@ This writes `players.csv` at the repository root. Both the raw and compact datas
 npm run data:prepare -- path/to/input.csv path/to/output.csv
 ```
 
-The API still reads the original dataset in this revision; switching the runtime loader to `players.csv` is a separate change. The current fixture contains 10 records, including two goalkeepers.
+The API will ask you to run this command if `male_players.csv` exists but `players.csv` does not. It does not silently substitute the small fixture in that situation. The current fixture contains 10 records, including two goalkeepers.
 
 ### Install dependencies
 
@@ -43,10 +43,11 @@ From the repository root, run:
 
 ```bash
 npm install
+npm run data:prepare # when using male_players.csv
 npm run build
 ```
 
-`npm install` installs every workspace, including the frontend, API, shared contracts, and simulation engine. `npm run build` then creates the generated `dist` files used by the workspace imports.
+`npm install` installs every workspace, including the frontend, API, shared contracts, and simulation engine. `npm run data:prepare` creates the compact full-dataset artifact when the raw dataset is available. `npm run build` then creates the generated `dist` files used by the workspace imports.
 
 The initial build is required on a fresh clone. The API imports `@footballsimsim/shared` and `@footballsimsim/simulation` from their compiled output, and those `dist` directories are not stored in Git. Without the build, `npm run dev:api` can fail because it cannot resolve those packages. No environment file is needed for local development.
 
@@ -78,6 +79,7 @@ The complete first-time setup order is:
 
 ```bash
 npm install
+npm run data:prepare # omit this when using only test.csv
 npm run build
 ```
 
@@ -118,11 +120,11 @@ The compiled frontend is written to `apps/web/dist`. The compiled API and intern
 | One player's FIFA history | `http://localhost:3001/players/:playerId/versions` |
 | Match simulation | `POST http://localhost:3001/matches/simulate` |
 
-If the API fails during startup, first confirm that `test.csv` exists at the repository root and still has its header row. If the web app cannot load players, confirm that the API is running on port 3001, then use the retry button.
+If the API reports that the compact dataset is missing, run `npm run data:prepare`. When using only the fixture, confirm that `test.csv` exists at the repository root and still has its header row. If the web app cannot load players, confirm that the API is running on port 3001, then use the retry button.
 
 ### Large dataset behavior
 
-The same loader supports the current 10-row fixture and the intended dataset of roughly 180,000 rows. The API currently reads the raw CSV once at startup, preserves every column, builds indexed historical-player lookups, and precomputes searchable names, clubs, nationalities, versions, and positions.
+The loader supports the current 10-row raw fixture and the compact dataset of roughly 180,000 rows. At startup, the API loads the 33 compact columns, builds indexed historical-player lookups, and precomputes searchable names, clubs, nationalities, versions, and canonical-role masks. Raw fixtures are projected into the same compact in-memory representation.
 
 `npm run data:prepare` creates a 33-column compact artifact containing identity, display/search fields, normalized roles, and the attributes currently consumed by the simulation. It deliberately omits unused source metadata and `movement_acceleration`. The raw file is never modified.
 
@@ -150,12 +152,12 @@ The first version is a web demo built for judges to understand within a minute. 
 
 ## Current data
 
-`test.csv` is the prototype data source. It currently contains 10 player records plus the header, which is enough for two five-a-side teams as long as it includes two usable goalkeepers. Opposing teams may select the same historical player version, so the fixture can still support an end-to-end demo if its positional coverage is uneven.
+`players.csv` is the full local runtime data source. `test.csv` is the fallback prototype source when the full raw and compact files are absent. The fixture currently contains 10 player records plus the header, which is enough for two five-a-side teams as long as it includes two usable goalkeepers. Opposing teams may select the same historical player version, so the fixture can still support an end-to-end demo if its positional coverage is uneven.
 
 For now:
 
 - Keep the downloaded source dataset unchanged.
-- Generate `players.csv` when a compact local artifact is needed; do not commit either dataset.
+- Generate `players.csv` before running the API with the full dataset; do not commit either dataset.
 - Load data locally from CSV or an in-memory representation derived from it.
 - Do not introduce a production database before the match engine works.
 - Treat `player_id + fifa_version` as the provisional historical identity.

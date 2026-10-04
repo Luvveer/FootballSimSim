@@ -6,10 +6,9 @@ function record(overrides: Partial<PlayerRecord> = {}): PlayerRecord {
   return {
     player_id: "1",
     fifa_version: "15.0",
-    fifa_update: "2.0",
     short_name: "A. Player",
     long_name: "An Example Player",
-    player_positions: "CAM",
+    player_roles: "MID",
     overall: "82",
     pace: "80",
     shooting: "80",
@@ -22,8 +21,8 @@ function record(overrides: Partial<PlayerRecord> = {}): PlayerRecord {
 }
 
 describe("historical player attribute conversion", () => {
-  it("normalizes every listed position into canonical roles", () => {
-    expect(toHistoricalPlayer(record({ player_positions: "LM, LW, CAM" })).positions).toEqual(["MID", "FWD"]);
+  it("preserves every canonical role from the compact record", () => {
+    expect(toHistoricalPlayer(record({ player_roles: "MID|FWD" })).positions).toEqual(["MID", "FWD"]);
   });
 
   it("preserves missing and invalid optional attributes as undefined", () => {

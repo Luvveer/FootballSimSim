@@ -8,10 +8,12 @@ const mapGk = (raw: Record<string, unknown>): Player['gk'] => {
   return Object.values(gk).every(Number.isFinite) ? gk : undefined
 }
 
-const mapPlayer = (raw: Record<string, unknown>, index: number): Player => {
+export const mapPlayer = (raw: Record<string, unknown>, index: number): Player => {
   const sourcePositions = Array.isArray(raw.positions)
     ? raw.positions.map(String)
-    : String(raw.position ?? raw.playerPositions ?? raw.player_positions ?? '')
+    : typeof raw.player_roles === 'string'
+      ? raw.player_roles.split('|')
+      : String(raw.position ?? raw.playerPositions ?? raw.player_positions ?? '')
   const position = normalizePositions(sourcePositions)[0]
   if (!position) throw new Error('The player response contains an unsupported position.')
   return {

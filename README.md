@@ -14,13 +14,13 @@ Install the following before starting:
 
 - Node.js 20 or newer
 - npm, which is included with Node.js
-- A local copy of the FIFA subset named `test.csv`
+- A local FIFA dataset named `male_players.csv`, or the smaller `test.csv` fixture
 
-`test.csv` is intentionally ignored by Git. Ask another team member for the current file and place it at the repository root:
+Both dataset filenames are intentionally ignored by Git. Ask another team member for the current file and place it at the repository root. The API prefers `male_players.csv` and falls back to `test.csv`:
 
 ```text
 FootballSimSim/
-  test.csv
+  male_players.csv
 ```
 
 Do not remove columns from the CSV. The API reads the original headers and expects, at minimum, player identity, FIFA version, position, and rating fields. The current fixture contains 10 records, including two goalkeepers.
@@ -103,9 +103,10 @@ The compiled frontend is written to `apps/web/dist`. The compiled API and intern
 | API health check | `http://localhost:3001/health` |
 | Player search | `http://localhost:3001/players` |
 | Available FIFA versions | `http://localhost:3001/players/versions` |
+| One player's FIFA history | `http://localhost:3001/players/:playerId/versions` |
 | Match simulation | `POST http://localhost:3001/matches/simulate` |
 
-If the API fails during startup, first confirm that `test.csv` exists at the repository root and still has its header row. If the web app shows fallback players, confirm that the API is running on port 3001, then reload the page.
+If the API fails during startup, first confirm that `test.csv` exists at the repository root and still has its header row. If the web app cannot load players, confirm that the API is running on port 3001, then use the retry button.
 
 ### Large dataset behavior
 
@@ -122,11 +123,12 @@ A user will be able to:
 1. Search for a real player.
 2. Choose a specific FIFA version of that player.
 3. Inspect a player card with the version, club, nationality, positions, overall rating, and headline attributes.
-4. Place five historical player versions into a lineup.
-5. Build or select an opposing lineup.
-6. Start a simulated match.
-7. Watch the match unfold through a clock, score, and event timeline.
-8. Review the result, team statistics, player statistics, ratings, and Man of the Match.
+4. Compare two FIFA versions of the same player using exact attribute changes and a radar chart.
+5. Place five historical player versions into a lineup.
+6. Build or select an opposing lineup.
+7. Start a simulated match.
+8. Watch the match unfold through a clock, score, and event timeline.
+9. Review the result, team statistics, player statistics, ratings, and Man of the Match.
 
 The result will come from an explainable probability model. Individual actions will compare relevant FIFA attributes, position and role context, and controlled randomness. Overall team rating may inform broad balance, but it will not decide the match by itself. A seed should make a simulation reproducible for tests and live demos.
 

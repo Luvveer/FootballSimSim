@@ -2,6 +2,7 @@ import type { MatchEventType, OffsideDecision, ReplaySnapshot, RestartType, Team
 export type Player = {
   id: string
   name: string
+  fullName?: string
   version: string
   rating: number
   position: string
@@ -10,6 +11,7 @@ export type Player = {
   pace: number
   shooting: number
   passing: number
+  dribbling: number
   defending: number
   physical: number
   image?: string

@@ -7,6 +7,7 @@ export type Player = {
   version: string
   rating: number
   position: PitchRole
+  positions: PitchRole[]
   club: string
   nationality: string
   pace: number
@@ -15,7 +16,7 @@ export type Player = {
   dribbling: number
   defending: number
   physical: number
-  gk?: { diving: number; reflexes: number; handling: number; speed: number; kicking: number; positioning: number }
+  gk?: { diving?: number; reflexes?: number; handling?: number; speed?: number; kicking?: number; positioning?: number }
   image?: string
 }
 

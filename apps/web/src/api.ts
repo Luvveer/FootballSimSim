@@ -3,10 +3,16 @@ import { apiUrl } from './api-url'
 import { FORMATIONS } from './formations'
 import type { Lineup, MatchEvent, MatchResult, Player } from './types'
 
+const optionalNumber = (value: unknown): number | undefined => {
+  if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 const mapGk = (raw: Record<string, unknown>): Player['gk'] => {
-  const g = (key: string) => Number(raw[`goalkeeping_${key}`] ?? (raw.gk as Record<string, unknown> | undefined)?.[key])
+  const g = (key: string) => optionalNumber(raw[`goalkeeping_${key}`] ?? (raw.gk as Record<string, unknown> | undefined)?.[key])
   const gk = { diving: g('diving'), reflexes: g('reflexes'), handling: g('handling'), speed: g('speed'), kicking: g('kicking'), positioning: g('positioning') }
-  return Object.values(gk).every(Number.isFinite) ? gk : undefined
+  return Object.values(gk).some(value => value !== undefined) ? gk : undefined
 }
 
 export const mapPlayer = (raw: Record<string, unknown>, index: number): Player => {
@@ -15,7 +21,8 @@ export const mapPlayer = (raw: Record<string, unknown>, index: number): Player =
     : typeof raw.player_roles === 'string'
       ? raw.player_roles.split('|')
       : String(raw.position ?? raw.playerPositions ?? raw.player_positions ?? '')
-  const position = normalizePositions(sourcePositions)[0]
+  const positions = normalizePositions(sourcePositions)
+  const position = positions[0]
   if (!position) throw new Error('The player response contains an unsupported position.')
   const playerId = String(raw.playerId ?? raw.player_id ?? raw.id ?? `${raw.name ?? raw.short_name}-${index}`)
   const version = String(raw.version ?? raw.fifaVersion ?? raw.fifa_version ?? 'FIFA')
@@ -27,6 +34,7 @@ export const mapPlayer = (raw: Record<string, unknown>, index: number): Player =
     version,
     rating: Number(raw.rating ?? raw.overall ?? 0),
     position,
+    positions,
     club: String(raw.club ?? raw.clubName ?? raw.club_name ?? 'Free agent'),
     nationality: String(raw.nationality ?? raw.nationalityName ?? raw.nationality_name ?? 'Unknown'),
     pace: Number(raw.pace ?? raw.pac ?? (raw.attributes as Record<string,unknown>)?.pace ?? 0),

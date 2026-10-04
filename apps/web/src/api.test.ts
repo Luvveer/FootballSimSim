@@ -22,7 +22,7 @@ describe("API player identity", () => {
     const fifa20 = apiPlayer("20.0");
     const fifa21 = apiPlayer("21.0");
 
-    expect(fifa20).toMatchObject({ playerId: "158023", id: "158023:20.0", version: "20.0", position: "FWD" });
+    expect(fifa20).toMatchObject({ playerId: "158023", id: "158023:20.0", version: "20.0", position: "FWD", positions: ["FWD", "MID"] });
     expect(fifa21).toMatchObject({ playerId: "158023", id: "158023:21.0", version: "21.0" });
     expect(new Set([fifa20.id, fifa21.id]).size).toBe(2);
     expect(apiPlayer("20.0").id).toBe(fifa20.id);
@@ -34,7 +34,22 @@ describe("API player identity", () => {
       fifa_version: "23",
       short_name: "Legacy",
       player_positions: "CM, CB",
-    }, 0).position).toBe("MID");
+    }, 0).positions).toEqual(["MID", "DEF"]);
+  });
+
+  it("preserves missing goalkeeper attributes without inventing zero ratings", () => {
+    const goalkeeper = mapPlayer({
+      player_id: "1",
+      fifa_version: "20",
+      short_name: "Keeper",
+      player_roles: "GK",
+      goalkeeping_diving: "85",
+      goalkeeping_kicking: "",
+      goalkeeping_speed: "0",
+    }, 0);
+
+    expect(goalkeeper.gk).toMatchObject({ diving: 85, speed: 0 });
+    expect(goalkeeper.gk?.kicking).toBeUndefined();
   });
 
   it("serializes the source player ID and FIFA version instead of the composite UI ID", () => {

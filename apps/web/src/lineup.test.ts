@@ -21,6 +21,7 @@ function player(id: string): Player {
     name: id,
     rating: 80,
     position: "MID",
+    positions: ["MID"],
     club: "Club",
     nationality: "Country",
     pace: 80,

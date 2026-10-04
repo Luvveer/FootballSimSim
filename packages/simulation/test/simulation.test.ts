@@ -206,6 +206,23 @@ describe("attribute-driven match model", () => {
     expect(weakConceded).toBeGreaterThan(strongConceded * 1.5);
   });
 
+  it("uses broad-attribute fallbacks when optional composure is missing", () => {
+    const explicit = config("missing-composure-fallback");
+    for (const side of [explicit.homeTeam, explicit.awayTeam]) {
+      for (const slot of side.lineup) {
+        slot.player.attributes.shooting = 80;
+        slot.player.attributes.positioning = 80;
+        slot.player.attributes.composure = 80;
+      }
+    }
+    const missing = structuredClone(explicit);
+    for (const side of [missing.homeTeam, missing.awayTeam]) {
+      for (const slot of side.lineup) delete slot.player.attributes.composure;
+    }
+
+    expect(simulateMatch(missing)).toEqual(simulateMatch(explicit));
+  });
+
   it("retains the receiving player as the next ball carrier and prevents shots during early buildup", () => {
     const result = simulateMatch(config("carrier-continuity"));
     for (const [index, event] of result.events.entries()) {
@@ -233,6 +250,7 @@ describe("attribute-driven match model", () => {
       expect(event.snapshot.teamStats.HOME.possession + event.snapshot.teamStats.AWAY.possession).toBe(100);
       expect(event.snapshot.teamStats.HOME.goals).toBe(event.score.home);
       expect(event.snapshot.teamStats.AWAY.goals).toBe(event.score.away);
+      if (event.snapshot.carrierKey) expect(event.snapshot.carrierKey).toMatch(new RegExp(`^${event.snapshot.possession}:`));
       for (const point of [event.snapshot.ball, ...event.snapshot.players]) {
         expect(point.x).toBeGreaterThanOrEqual(0); expect(point.x).toBeLessThanOrEqual(100);
         expect(point.y).toBeGreaterThanOrEqual(0); expect(point.y).toBeLessThanOrEqual(100);
@@ -244,6 +262,9 @@ describe("attribute-driven match model", () => {
       expect(shots.length).toBe(result.teamStats[side].shots);
       expect(result.events.at(-1)!.snapshot.teamStats[side].shots).toBe(result.teamStats[side].shots);
     }
+    const saves = result.events.filter(event => event.type === "SAVE");
+    expect(saves.length).toBeGreaterThan(0);
+    for (const save of saves) expect(save.snapshot.carrierKey).toBe(`${save.team}:${save.playerId}`);
   });
 });
 

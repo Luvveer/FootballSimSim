@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
+import { PITCH_ROLES, type PitchRole } from '@footballsimsim/shared'
 import { Check, ChevronLeft, ChevronRight, CircleDot, Gauge, GitCompareArrows, Pencil, Play, Search, Shield, Sparkles, X } from 'lucide-react'
 import { fetchPlayers, simulateMatch } from './api'
 import { MatchReplay } from './MatchReplay'
 import { PlayerComparison } from './PlayerComparison'
 import { Results } from './Results'
 import { DEFAULT_FORMATION, FORMATIONS, roleLabel, slotLabel } from './formations'
+import { assignPlayer, emptyLineup, firstAvailableSlot, isLineupComplete, lineupFilledCount, lineupHasPlayer, remapLineup, resolveActiveSlot } from './lineup'
 import type { Lineup, MatchResult, Player, Side, Slot } from './types'
-
-const emptyLineup = (formation: string): Lineup => Object.fromEntries(FORMATIONS[formation].map(slot => [slot.id, null]))
 
 export function App() {
   const [view, setView] = useState<'builder'|'match'|'result'>('builder')
@@ -21,7 +21,7 @@ export function App() {
   const [activeSide, setActiveSide] = useState<Side>('home')
   const [activeSlot, setActiveSlot] = useState<Slot>('ST')
   const [query, setQuery] = useState('')
-  const [position, setPosition] = useState('ALL')
+  const [position, setPosition] = useState<PitchRole|'ALL'>('ALL')
   const [result, setResult] = useState<MatchResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [playersLoading, setPlayersLoading] = useState(true)
@@ -83,26 +83,33 @@ export function App() {
       if (!controller.signal.aborted) setLoadingMore(false)
     }
   }
-  const ready = Object.values(home).every(Boolean) && Object.values(away).every(Boolean)
-  const filled = Object.values(home).filter(Boolean).length + Object.values(away).filter(Boolean).length
+  const ready = isLineupComplete(home, homeFormation) && isLineupComplete(away, awayFormation)
+  const filled = lineupFilledCount(home, homeFormation) + lineupFilledCount(away, awayFormation)
+
+  const activateSide = (side: Side) => {
+    const formation = side === 'home' ? homeFormation : awayFormation
+    const lineup = side === 'home' ? home : away
+    setActiveSide(side)
+    setActiveSlot(current => resolveActiveSlot(formation, lineup, current))
+  }
 
   const selectPlayer = (player: Player) => {
     const lineup = activeSide === 'home' ? home : away
     const setter = activeSide === 'home' ? setHome : setAway
-    if (Object.values(lineup).some(item => item?.id === player.id)) return
-    setter({ ...lineup, [activeSlot]: player })
     const formation = activeSide === 'home' ? homeFormation : awayFormation
-    const next = FORMATIONS[formation].find(slot => !lineup[slot.id] && slot.id !== activeSlot)
-    if (next) setActiveSlot(next.id)
+    if (lineupHasPlayer(lineup, formation, player.id)) return
+    const next = assignPlayer(lineup, formation, activeSlot, player)
+    setter(next.lineup)
+    setActiveSlot(next.nextSlot)
   }
 
   const changeFormation = (side: Side, formation: string) => {
     const lineup = side === 'home' ? home : away
-    const next = emptyLineup(formation)
-    for (const id of Object.keys(next)) next[id] = lineup[id] ?? null
+    const previousFormation = side === 'home' ? homeFormation : awayFormation
+    const next = remapLineup(lineup, previousFormation, formation)
     if (side === 'home') { setHomeFormation(formation); setHome(next) } else { setAwayFormation(formation); setAway(next) }
     setActiveSide(side)
-    setActiveSlot(FORMATIONS[formation].find(slot => !next[slot.id])?.id ?? FORMATIONS[formation][0].id)
+    setActiveSlot(firstAvailableSlot(formation, next))
   }
 
   const start = async () => {
@@ -120,11 +127,19 @@ export function App() {
     }
   }
 
-  if (view === 'match' && result) return <MatchReplay result={result} onComplete={() => setView('result')} />
-  if (view === 'result' && result) return <Results result={result} onReplay={() => setView('match')} onReset={() => { setView('builder'); setResult(null) }} />
+  const returnToBuilder = () => {
+    if (view === 'builder') window.scrollTo({ top: 0, behavior: 'auto' })
+    setView('builder')
+    setResult(null)
+    setComparisonPlayer(null)
+    setMatchError(null)
+  }
+
+  if (view === 'match' && result) return <MatchReplay result={result} onComplete={() => setView('result')} onHome={returnToBuilder} />
+  if (view === 'result' && result) return <Results result={result} onReplay={() => setView('match')} onReset={returnToBuilder} />
 
   return <div className="app-shell">
-    <Header step="build" />
+    <Header step="build" onHome={returnToBuilder} />
     <main className="builder-main">
       <section className="intro-row">
         <div><p className="eyebrow">Build the impossible match</p><h1>Pick your five.</h1><p className="lede">Choose any era. Any position. Settle the argument on the pitch.</p></div>
@@ -138,17 +153,17 @@ export function App() {
       {matchError && <div className="status-banner error" role="alert"><span>{matchError}</span><button onClick={() => void start()}>Try match again</button></div>}
 
       <div className="builder-grid">
-        <div className="team-column"><TeamHeader side="home" name={homeName} formation={homeFormation} setName={setHomeName} active={activeSide==='home'} onClick={() => setActiveSide('home')} /><Pitch side="home" formation={homeFormation} onFormation={f => changeFormation('home', f)} lineup={home} activeSlot={activeSide==='home' ? activeSlot : null} onSlot={setActiveSlot} onRemove={slot => setHome({...home,[slot]:null})} onActivate={() => setActiveSide('home')} /></div>
-        <PlayerBrowser activeName={activeSide==='home'?homeName:awayName} searching={searchPending} players={players} total={playerTotal} loadingMore={loadingMore} onLoadMore={loadMorePlayers} query={query} setQuery={setQuery} position={position} setPosition={setPosition} activeSlot={activeSlot} lineup={activeSide==='home'?home:away} onSelect={selectPlayer} onCompare={setComparisonPlayer} />
-        <div className="team-column"><TeamHeader side="away" name={awayName} formation={awayFormation} setName={setAwayName} active={activeSide==='away'} onClick={() => setActiveSide('away')} /><Pitch side="away" formation={awayFormation} onFormation={f => changeFormation('away', f)} lineup={away} activeSlot={activeSide==='away' ? activeSlot : null} onSlot={setActiveSlot} onRemove={slot => setAway({...away,[slot]:null})} onActivate={() => setActiveSide('away')} /></div>
+        <div className="team-column"><TeamHeader side="home" name={homeName} formation={homeFormation} setName={setHomeName} active={activeSide==='home'} onClick={() => activateSide('home')} /><Pitch side="home" formation={homeFormation} onFormation={f => changeFormation('home', f)} lineup={home} activeSlot={activeSide==='home' ? activeSlot : null} onSlot={setActiveSlot} onRemove={slot => setHome({...home,[slot]:null})} onActivate={() => activateSide('home')} /></div>
+        <PlayerBrowser activeName={activeSide==='home'?homeName:awayName} searching={searchPending} players={players} total={playerTotal} loadingMore={loadingMore} onLoadMore={loadMorePlayers} query={query} setQuery={setQuery} position={position} setPosition={setPosition} activeSlot={activeSlot} formation={activeSide==='home'?homeFormation:awayFormation} lineup={activeSide==='home'?home:away} onSelect={selectPlayer} onCompare={setComparisonPlayer} />
+        <div className="team-column"><TeamHeader side="away" name={awayName} formation={awayFormation} setName={setAwayName} active={activeSide==='away'} onClick={() => activateSide('away')} /><Pitch side="away" formation={awayFormation} onFormation={f => changeFormation('away', f)} lineup={away} activeSlot={activeSide==='away' ? activeSlot : null} onSlot={setActiveSlot} onRemove={slot => setAway({...away,[slot]:null})} onActivate={() => activateSide('away')} /></div>
       </div>
     </main>
     {comparisonPlayer && <PlayerComparison player={comparisonPlayer} onClose={() => setComparisonPlayer(null)} />}
   </div>
 }
 
-export function Header({ step }:{ step:'build'|'match'|'result' }) {
-  return <header className="topbar"><a className="brand" href="#" aria-label="FootballSimSim home"><span className="brand-mark"><CircleDot size={22}/></span><span>FOOTBALL<span>SIM</span>SIM</span></a><nav aria-label="Match progress"><span className={step==='build'?'current':''}>01 Build</span><i/><span className={step==='match'?'current':''}>02 Match</span><i/><span className={step==='result'?'current':''}>03 Results</span></nav><div className="format"><Gauge size={16}/><span>5v5 · 1 min = 1 sec</span></div></header>
+export function Header({ step,onHome }:{ step:'build'|'match'|'result';onHome:()=>void }) {
+  return <header className="topbar"><button type="button" className="brand" onClick={onHome} aria-label="FootballSimSim home"><span className="brand-mark"><CircleDot size={22}/></span><span>FOOTBALL<span>SIM</span>SIM</span></button><nav aria-label="Match progress"><span className={step==='build'?'current':''}>01 Build</span><i/><span className={step==='match'?'current':''}>02 Match</span><i/><span className={step==='result'?'current':''}>03 Results</span></nav><div className="format"><Gauge size={16}/><span>5v5 · 1 min = 1 sec</span></div></header>
 }
 
 function TeamHeader({side,name,formation,setName,active,onClick}:{side:Side;name:string;formation:string;setName:(name:string)=>void;active:boolean;onClick:()=>void}) {
@@ -172,13 +187,13 @@ function Pitch({ side,formation,onFormation,lineup,activeSlot,onSlot,onRemove,on
   </div>
 }
 
-function PlayerBrowser({activeName,searching,players,total,loadingMore,onLoadMore,query,setQuery,position,setPosition,activeSlot,lineup,onSelect,onCompare}:{activeName:string;searching:boolean;players:Player[];total:number;loadingMore:boolean;onLoadMore:()=>void;query:string;setQuery:(q:string)=>void;position:string;setPosition:(position:string)=>void;activeSlot:Slot;lineup:Lineup;onSelect:(p:Player)=>void;onCompare:(p:Player)=>void}) {
+function PlayerBrowser({activeName,searching,players,total,loadingMore,onLoadMore,query,setQuery,position,setPosition,activeSlot,formation,lineup,onSelect,onCompare}:{activeName:string;searching:boolean;players:Player[];total:number;loadingMore:boolean;onLoadMore:()=>void;query:string;setQuery:(q:string)=>void;position:PitchRole|'ALL';setPosition:(position:PitchRole|'ALL')=>void;activeSlot:Slot;formation:string;lineup:Lineup;onSelect:(p:Player)=>void;onCompare:(p:Player)=>void}) {
   return <section className="player-browser" aria-label="Player selection">
     <div className="browser-title"><div><p className="eyebrow">Player library</p><h2>Choose for <span>{activeName} · {slotLabel(activeSlot)}</span></h2></div><span className="count">{searching ? 'Searching…' : `${players.length.toLocaleString()} of ${total.toLocaleString()}`}</span></div>
     <label className="search-box"><Search size={18}/><span className="sr-only">Search players</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search player, club, or year…"/></label>
-    <div className="filter-row" role="group" aria-label="Filter by position">{['ALL','GK','DEF','MID','ATT'].map(p=><button className={position===p?'active':''} onClick={()=>setPosition(p)} key={p}>{p}</button>)}</div>
-    <div className="player-list" aria-busy={searching}>{searching ? <div className="empty-search" role="status">Searching players…</div> : players.length ? players.map(player => { const used=Object.values(lineup).some(p=>p?.id===player.id); return <article className={`player-card ${used?'used':''}`} key={`${player.id}:${player.version}`}>
-      <button className="player-card-main" title={player.fullName??player.name} disabled={used} onClick={()=>onSelect(player)} aria-label={`${used?'Already selected':'Add'} ${player.fullName??player.name}, ${formatVersion(player.version)}`}><span className="card-rating"><b>{player.rating}</b><small>{player.position}</small></span><span className="card-avatar">{initials(player.name)}</span><span className="card-identity"><b>{player.name}</b><small>{player.club} · {player.nationality}</small><span>{formatVersion(player.version)}</span></span><span className="mini-stats">{player.position==='GK'&&player.gk ? <><small><b>{player.gk.diving}</b>DIV</small><small><b>{player.gk.reflexes}</b>REF</small><small><b>{player.gk.handling}</b>HAN</small><small><b>{player.gk.speed}</b>SPE</small><small><b>{player.gk.kicking}</b>KIC</small><small><b>{player.gk.positioning}</b>POS</small></> : <><small><b>{player.pace}</b>PAC</small><small><b>{player.shooting}</b>SHO</small><small><b>{player.passing}</b>PAS</small><small><b>{player.dribbling}</b>DRI</small><small><b>{player.defending}</b>DEF</small><small><b>{player.physical}</b>PHY</small></>}</span><span className="add-player">{used?<Check size={16}/>:<span>+</span>}</span></button><button className="compare-player" onClick={()=>onCompare(player)} aria-label={`Compare FIFA versions of ${player.name}`} title="Compare FIFA versions"><GitCompareArrows size={16}/></button>
+    <div className="filter-row" role="group" aria-label="Filter by position">{(['ALL',...PITCH_ROLES] as const).map(p=><button className={position===p?'active':''} onClick={()=>setPosition(p)} key={p}>{p}</button>)}</div>
+    <div className="player-list" aria-busy={searching}>{searching ? <div className="empty-search" role="status">Searching players…</div> : players.length ? players.map(player => { const used=lineupHasPlayer(lineup,formation,player.id); return <article className={`player-card ${used?'used':''}`} key={player.id}>
+      <button className="player-card-main" title={player.fullName??player.name} disabled={used} onClick={()=>onSelect(player)} aria-label={`${used?'Already selected':'Add'} ${player.fullName??player.name}, ${formatVersion(player.version)}`}><span className="card-rating"><b>{player.rating}</b><small>{player.positions.join(' · ')}</small></span><span className="card-avatar">{initials(player.name)}</span><span className="card-identity"><b>{player.name}</b><small>{player.club} · {player.nationality}</small><span>{formatVersion(player.version)}</span></span><span className="mini-stats">{player.position==='GK' ? <><small><b>{player.gk?.diving??'—'}</b>DIV</small><small><b>{player.gk?.reflexes??'—'}</b>REF</small><small><b>{player.gk?.handling??'—'}</b>HAN</small><small><b>{player.gk?.speed??'—'}</b>SPE</small><small><b>{player.gk?.kicking??'—'}</b>KIC</small><small><b>{player.gk?.positioning??'—'}</b>POS</small></> : <><small><b>{player.pace}</b>PAC</small><small><b>{player.shooting}</b>SHO</small><small><b>{player.passing}</b>PAS</small><small><b>{player.dribbling}</b>DRI</small><small><b>{player.defending}</b>DEF</small><small><b>{player.physical}</b>PHY</small></>}</span><span className="add-player">{used?<Check size={16}/>:<span>+</span>}</span></button><button className="compare-player" onClick={()=>onCompare(player)} aria-label={`Compare FIFA versions of ${player.name}`} title="Compare FIFA versions"><GitCompareArrows size={16}/></button>
     </article>}) : <div className="empty-search"><Search size={26}/><b>No players found</b><span>Try a name, club, or a different position.</span></div>}{!searching && players.length < total && <button className="load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? 'Loading…' : `Load more (${total-players.length} remaining)`}</button>}</div>
     <div className="browser-foot"><span><Sparkles size={15}/> Historical versions are rated independently</span><button onClick={()=>{setQuery('');setPosition('ALL')}}>Clear filters</button></div>
   </section>

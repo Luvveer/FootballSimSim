@@ -1,6 +1,6 @@
 import type { HistoricalPlayer, MatchConfig, PitchRole, Team } from "@footballsimsim/shared";
-import { TEAM_SIZE } from "@footballsimsim/shared";
-import type { PlayerRecord, PlayerRepository } from "./data/players.js";
+import { isPitchRole, TEAM_SIZE } from "@footballsimsim/shared";
+import { playerRoles, type PlayerRecord, type PlayerRepository } from "./data/players.js";
 
 interface LineupSelection {
   slotId?: unknown;
@@ -29,9 +29,16 @@ export class RequestValidationError extends Error {
   }
 }
 
-function number(record: PlayerRecord, key: string): number {
+function requiredNumber(record: PlayerRecord, key: string): number {
   const value = Number(record[key]);
   return Number.isFinite(value) ? value : 0;
+}
+
+function optionalNumber(record: PlayerRecord, key: string): number | undefined {
+  const raw = record[key];
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : undefined;
 }
 
 export function toHistoricalPlayer(record: PlayerRecord): HistoricalPlayer {
@@ -39,39 +46,38 @@ export function toHistoricalPlayer(record: PlayerRecord): HistoricalPlayer {
     id: `${record.player_id}:${record.fifa_version}`,
     playerId: record.player_id,
     fifaVersion: record.fifa_version,
-    fifaUpdate: record.fifa_update,
     name: record.long_name || record.short_name,
     shortName: record.short_name,
-    positions: record.player_positions.split(",").map((position) => position.trim()).filter(Boolean),
-    overall: number(record, "overall"),
+    positions: playerRoles(record),
+    overall: requiredNumber(record, "overall"),
     club: record.club_name || undefined,
     nationality: record.nationality_name || undefined,
     attributes: {
-      pace: number(record, "pace"),
-      shooting: number(record, "shooting"),
-      passing: number(record, "passing"),
-      dribbling: number(record, "dribbling"),
-      defending: number(record, "defending"),
-      physical: number(record, "physic"),
-      stamina: number(record, "power_stamina"),
-      positioning: number(record, "mentality_positioning"),
-      aggression: number(record, "mentality_aggression"),
-      penalties: number(record, "mentality_penalties"),
-      goalkeeperKicking: number(record, "goalkeeping_kicking"),
-      finishing: number(record, "attacking_finishing"),
-      vision: number(record, "mentality_vision"),
-      composure: number(record, "mentality_composure"),
-      reactions: number(record, "movement_reactions"),
-      interceptions: number(record, "mentality_interceptions"),
-      standingTackle: number(record, "defending_standing_tackle"),
-      ballControl: number(record, "skill_ball_control"),
-      agility: number(record, "movement_agility"),
-      acceleration: number(record, "movement_acceleration"),
-      strength: number(record, "power_strength"),
-      goalkeeperDiving: number(record, "goalkeeping_diving"),
-      goalkeeperHandling: number(record, "goalkeeping_handling"),
-      goalkeeperPositioning: number(record, "goalkeeping_positioning"),
-      goalkeeperReflexes: number(record, "goalkeeping_reflexes"),
+      pace: requiredNumber(record, "pace"),
+      shooting: requiredNumber(record, "shooting"),
+      passing: requiredNumber(record, "passing"),
+      dribbling: requiredNumber(record, "dribbling"),
+      defending: requiredNumber(record, "defending"),
+      physical: requiredNumber(record, "physic"),
+      stamina: optionalNumber(record, "power_stamina"),
+      positioning: optionalNumber(record, "mentality_positioning"),
+      aggression: optionalNumber(record, "mentality_aggression"),
+      penalties: optionalNumber(record, "mentality_penalties"),
+      goalkeeperKicking: optionalNumber(record, "goalkeeping_kicking"),
+      finishing: optionalNumber(record, "attacking_finishing"),
+      vision: optionalNumber(record, "mentality_vision"),
+      composure: optionalNumber(record, "mentality_composure"),
+      reactions: optionalNumber(record, "movement_reactions"),
+      interceptions: optionalNumber(record, "mentality_interceptions"),
+      standingTackle: optionalNumber(record, "defending_standing_tackle"),
+      ballControl: optionalNumber(record, "skill_ball_control"),
+      agility: optionalNumber(record, "movement_agility"),
+      acceleration: optionalNumber(record, "movement_acceleration"),
+      strength: optionalNumber(record, "power_strength"),
+      goalkeeperDiving: optionalNumber(record, "goalkeeping_diving"),
+      goalkeeperHandling: optionalNumber(record, "goalkeeping_handling"),
+      goalkeeperPositioning: optionalNumber(record, "goalkeeping_positioning"),
+      goalkeeperReflexes: optionalNumber(record, "goalkeeping_reflexes"),
     },
   };
 }
@@ -86,7 +92,7 @@ function requiredString(value: unknown, path: string, issues: string[]): string 
 
 function pitchRole(value: unknown, path: string, issues: string[]): PitchRole {
   const role = requiredString(value, path, issues).toUpperCase();
-  if (!(["GK", "DEF", "MID", "FWD"] as const).includes(role as PitchRole)) {
+  if (!isPitchRole(role)) {
     issues.push(`${path} must be GK, DEF, MID, or FWD`);
   }
   return role as PitchRole;

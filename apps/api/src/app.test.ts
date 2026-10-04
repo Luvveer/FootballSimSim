@@ -43,6 +43,14 @@ describe("API routes", () => {
     expect(response.json()).toMatchObject({ total: 2, players: [{ player_id: "1" }, { player_id: "1" }] });
   });
 
+  it("filters players through canonical roles", async () => {
+    const response = await app.inject({ method: "GET", url: "/players?position=FWD" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ total: 2, players: [{ player_id: "4" }, { player_id: "5" }] });
+    expect(response.json().players.every((player: { player_roles?: string }) => player.player_roles === "FWD")).toBe(true);
+    expect(response.json().players.every((player: { player_positions?: string }) => player.player_positions === undefined)).toBe(true);
+  });
+
   it("paginates players without changing the total", async () => {
     const response = await app.inject({ method: "GET", url: "/players?limit=2&offset=2" });
     expect(response.statusCode).toBe(200);

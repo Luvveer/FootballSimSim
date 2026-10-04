@@ -40,11 +40,7 @@ function skill(slot: LineupSlot, kind: "passing" | "dribbling" | "defending" | "
     shooting: [a("shooting"), a("finishing", "shooting"), a("composure", "shooting")],
     keeping: [a("goalkeeperDiving", "reactions"), a("goalkeeperHandling", "reactions"), a("goalkeeperPositioning", "reactions"), a("goalkeeperReflexes", "reactions")],
   };
-  const position = slot.player.positions;
-  const compatible = slot.role === "GK" ? position.includes("GK") : slot.role === "FWD"
-    ? position.some(p => ["ST", "CF", "LW", "RW", "FWD"].includes(p)) : slot.role === "DEF"
-    ? position.some(p => ["CB", "LB", "RB", "LWB", "RWB", "CDM", "DEF"].includes(p))
-    : position.some(p => ["LM", "RM", "CM", "CAM", "CDM", "LW", "RW", "MID"].includes(p));
+  const compatible = slot.player.positions.includes(slot.role);
   return average(values[kind]) * (compatible ? 1 : 0.9);
 }
 function profile(team: Team): TeamProfile {
@@ -199,7 +195,7 @@ export function simulateMatch(config: MatchConfig): MatchResult {
     explanation: string, secondary?: LineupSlot, probability?: number, expectedGoals?: number): MatchEvent => {
     const state = snapshot(type === "GOAL" ? "GOAL" : type === "SHOT" || type === "SAVE" ? "SHOT" : type === "HALF_TIME" ? "HALF_TIME" : type === "FULL_TIME" || type === "MATCH_ABANDONED" ? "FULL_TIME" : undefined);
     if (type === "SHOT" || type === "GOAL") state.ball = { x: worldX(98, eventSide), y: successful ? 50 : 25 };
-    if (type === "SAVE") { state.ball = { x: worldX(7, eventSide), y: 50 }; state.possession = eventSide; }
+    if (type === "SAVE") state.ball = { x: worldX(7, eventSide), y: 50 };
     if (type === "HALF_TIME") state.status = "HALF_TIME";
     if (type === "FULL_TIME") state.status = "FULL_TIME";
     if (type === "MATCH_ABANDONED") state.status = "ABANDONED";
@@ -275,9 +271,9 @@ export function simulateMatch(config: MatchConfig): MatchResult {
       queueRestart("KICKOFF", defendingSide, { x: 50, y: 50 });
     } else if (onTarget) {
       playerStatsFor(defendingSide, goalie).saves++; teamStats[defendingSide].saves++;
+      turnover(defendingSide, goalie); mustPass = true;
       emit("SAVE", defendingSide, goalie, true, `${name(goalie)} keeps it out.`, `Goalkeeping ${Math.round(keeping)} contests finishing ${Math.round(shooting)}.`, actor, 1 - goalGivenTarget);
       if (random() < 0.2) ballOut("GOAL_LINE", "DEFENCE", attackingSide, goalie);
-      else { turnover(defendingSide, goalie); mustPass = true; }
     } else ballOut("GOAL_LINE", "ATTACK", attackingSide, actor);
   };
   const pass = () => {

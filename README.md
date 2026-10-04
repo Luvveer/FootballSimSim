@@ -16,14 +16,26 @@ Install the following before starting:
 - npm, which is included with Node.js
 - A local FIFA dataset named `male_players.csv`, or the smaller `test.csv` fixture
 
-Both dataset filenames are intentionally ignored by Git. Ask another team member for the current file and place it at the repository root. The API prefers `male_players.csv` and falls back to `test.csv`:
+The dataset files are intentionally ignored by Git. Ask another team member for the current file and place it at the repository root. The API loads the generated `players.csv` for the full dataset, or `test.csv` when neither full-dataset file is present:
 
 ```text
 FootballSimSim/
   male_players.csv
 ```
 
-Do not remove columns from the CSV. The API reads the original headers and expects, at minimum, player identity, FIFA version, position, and rating fields. The current fixture contains 10 records, including two goalkeepers.
+Keep the source CSV unchanged. To generate a smaller, normalized local artifact from `male_players.csv`, run:
+
+```bash
+npm run data:prepare
+```
+
+This writes `players.csv` at the repository root. Both the raw and compact datasets are ignored by Git. The preparation step keeps one row per `player_id + fifa_version` (the highest `fifa_update`, then latest `update_as_of`), normalizes source positions to `GK`, `DEF`, `MID`, and `FWD`, and retains only fields used by the application. You can also provide explicit paths after `--`:
+
+```bash
+npm run data:prepare -- path/to/input.csv path/to/output.csv
+```
+
+The API will ask you to run this command if `male_players.csv` exists but `players.csv` does not. It does not silently substitute the small fixture in that situation. The current fixture contains 10 records, including two goalkeepers.
 
 ### Install dependencies
 
@@ -31,10 +43,11 @@ From the repository root, run:
 
 ```bash
 npm install
+npm run data:prepare # when using male_players.csv
 npm run build
 ```
 
-`npm install` installs every workspace, including the frontend, API, shared contracts, and simulation engine. `npm run build` then creates the generated `dist` files used by the workspace imports.
+`npm install` installs every workspace, including the frontend, API, shared contracts, and simulation engine. `npm run data:prepare` creates the compact full-dataset artifact when the raw dataset is available. `npm run build` then creates the generated `dist` files used by the workspace imports.
 
 The initial build is required on a fresh clone. The API imports `@footballsimsim/shared` and `@footballsimsim/simulation` from their compiled output, and those `dist` directories are not stored in Git. Without the build, `npm run dev:api` can fail because it cannot resolve those packages. No environment file is needed for local development.
 
@@ -62,10 +75,23 @@ npm run dev
 
 Open `http://localhost:5173` in a browser. Vite forwards requests beginning with `/api` to the local Fastify server, so both development processes must be running to use the real player data and match engine. The frontend has demo fallback data, but that fallback should not be used to verify backend work.
 
+### Production API URL
+
+The web app uses the same-origin `/api` path by default. Leave the API URL unset when the production host forwards `/api` requests to the Fastify server.
+
+When the web app and API are hosted separately, set `VITE_API_BASE_URL` to the API's public origin or full path prefix before building the web app:
+
+```bash
+VITE_API_BASE_URL=https://api.example.com npm run build
+```
+
+For example, `VITE_API_BASE_URL=https://example.com/services/api` sends player requests to `https://example.com/services/api/players`. Vite embeds this value in the frontend bundle at build time, so changing it requires a new web build.
+
 The complete first-time setup order is:
 
 ```bash
 npm install
+npm run data:prepare # omit this when using only test.csv
 npm run build
 ```
 
@@ -106,11 +132,13 @@ The compiled frontend is written to `apps/web/dist`. The compiled API and intern
 | One player's FIFA history | `http://localhost:3001/players/:playerId/versions` |
 | Match simulation | `POST http://localhost:3001/matches/simulate` |
 
-If the API fails during startup, first confirm that `test.csv` exists at the repository root and still has its header row. If the web app cannot load players, confirm that the API is running on port 3001, then use the retry button.
+If the API reports that the compact dataset is missing, run `npm run data:prepare`. When using only the fixture, confirm that `test.csv` exists at the repository root and still has its header row. If the web app cannot load players, confirm that the API is running on port 3001, then use the retry button.
 
 ### Large dataset behavior
 
-The same loader supports the current 10-row fixture and the intended dataset of roughly 180,000 rows. The API reads the CSV once at startup, preserves every column, builds indexed historical-player lookups, and precomputes searchable names, clubs, nationalities, versions, and positions.
+The loader supports the current 10-row raw fixture and the compact dataset of roughly 180,000 rows. At startup, the API loads the 33 compact columns, builds indexed historical-player lookups, and precomputes searchable names, clubs, nationalities, versions, and canonical-role masks. Raw fixtures are projected into the same compact in-memory representation.
+
+`npm run data:prepare` creates a 33-column compact artifact containing identity, display/search fields, normalized roles, and the attributes currently consumed by the simulation. It deliberately omits unused source metadata and `movement_acceleration`. The raw file is never modified.
 
 The player browser requests 40 records at a time. Search and position filters run on the API, and the Load more button requests the next page using `limit` and `offset`. The browser never downloads the full dataset.
 
@@ -122,7 +150,7 @@ A user will be able to:
 
 1. Search for a real player.
 2. Choose a specific FIFA version of that player.
-3. Inspect a player card with the version, club, nationality, positions, overall rating, and headline attributes.
+3. Inspect a player card with the version, club, nationality, normalized role, overall rating, and headline attributes.
 4. Compare two FIFA versions of the same player using exact attribute changes and a radar chart.
 5. Place five historical player versions into a lineup.
 6. Build or select an opposing lineup.
@@ -136,16 +164,16 @@ The first version is a web demo built for judges to understand within a minute. 
 
 ## Current data
 
-`test.csv` is the prototype data source. It currently contains 10 player records plus the header, which is enough for two five-a-side teams as long as it includes two usable goalkeepers. Opposing teams may select the same historical player version, so the fixture can still support an end-to-end demo if its positional coverage is uneven.
+`players.csv` is the full local runtime data source. `test.csv` is the fallback prototype source when the full raw and compact files are absent. The fixture currently contains 10 player records plus the header, which is enough for two five-a-side teams as long as it includes two usable goalkeepers. Opposing teams may select the same historical player version, so the fixture can still support an end-to-end demo if its positional coverage is uneven.
 
 For now:
 
-- Keep every original column.
-- Do not clean, reshape, or reduce the dataset.
+- Keep the downloaded source dataset unchanged.
+- Generate `players.csv` before running the API with the full dataset; do not commit either dataset.
 - Load data locally from CSV or an in-memory representation derived from it.
 - Do not introduce a production database before the match engine works.
 - Treat `player_id + fifa_version` as the provisional historical identity.
-- Confirm how `fifa_update` should affect identity if the full dataset contains several updates for one player and FIFA version.
+- Within a `player_id + fifa_version`, select the highest numeric `fifa_update`, then the latest `update_as_of` when updates tie.
 
 The intended historical range is FIFA 15 through FIFA 23.
 
@@ -156,7 +184,8 @@ These are working recommendations, not settled product decisions:
 - The hackathon demo will be a desktop-first responsive web app, not a native mobile app.
 - Each lineup will have five starters, including one goalkeeper, and no substitutes in the first release.
 - The first supported shape will be 1-2-1, with one goalkeeper behind four outfield players. The lineup screen will show those positions on a small-sided pitch.
-- Position selection will be flexible. Any player can occupy any slot, with no hard validation based on their listed FIFA positions.
+- Source positions are normalized to `GK`, `DEF`, `MID`, or `FWD`. Multi-position players may belong to more than one normalized role.
+- Position selection will be flexible. Any player can occupy any slot, with no hard validation based on their normalized roles.
 - A simulated match will cover 90 minutes without extra time, penalties, injuries, or substitutions.
 - The live presentation will replay a completed simulation event by event. The backend will calculate the full result first, and the frontend will reveal it on a compressed clock.
 - Team tactics will be omitted or limited to one small set of modifiers in the first version.

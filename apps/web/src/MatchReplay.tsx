@@ -8,7 +8,7 @@ import { advanceReplayElapsed, matchClock, matchTimeline, playbackRemaining, rep
 
 const phases = { BUILDUP: 'Building from the back', PROGRESSION: 'Moving through midfield', ATTACK: 'Pressure in the final third', SHOT: 'Chance at goal', GOAL: 'Goal!', RESTART: 'Set piece', HALF_TIME: 'Half time', FULL_TIME: 'Full time' }
 
-export function MatchReplay({ result, onComplete }: { result: MatchResult; onComplete: () => void }) {
+export function MatchReplay({ result, onComplete, onHome }: { result: MatchResult; onComplete: () => void; onHome: () => void }) {
   const [elapsed, setElapsed] = useState(0)
   const [paused, setPaused] = useState(false)
   const [speed, setSpeed] = useState(1)
@@ -56,7 +56,7 @@ export function MatchReplay({ result, onComplete }: { result: MatchResult; onCom
   const homeDirection = snapshot?.direction?.HOME ?? 1
   const finishedLabel = result.status === 'ABANDONED' ? 'Match abandoned' : 'Full time'
 
-  return <div className="match-page arena-page"><Header step="match"/><main className="arena-main">
+  return <div className="match-page arena-page"><Header step="match" onHome={onHome}/><main className="arena-main">
     <div className="arena-topline"><span className="live-pill"><span/>{paused ? 'Replay paused' : inHalfTime ? 'Half-time break' : complete ? finishedLabel : 'Match in progress'}</span><span>5-a-side · Football rules</span></div>
     <section className={`arena-scoreboard ${goal ? 'celebrating' : ''}`} aria-label="Scoreboard">
       <div className="arena-team home"><span className="arena-crest"><Shield/></span><div><small>Home · attacking {homeDirection === 1 ? '→' : '←'}</small><b>{result.home.name}</b></div></div>

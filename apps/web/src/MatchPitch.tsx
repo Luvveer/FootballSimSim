@@ -68,7 +68,6 @@ function PlayerFigure({ player, motion, carrier, throwing }: {
   const surname = /^(Jr\.?|Sr\.?|II|III)$/.test(last) ? parts.slice(-2).join(' ') : last
   const name = surname.length > 16 ? `${surname.slice(0, 15)}…` : surname
   return <g transform={`translate(${position.x} ${position.y})`} className={`pitch-person ${player.team.toLowerCase()} ${player.role === 'GK' ? 'keeper' : ''} ${carrier ? 'has-ball' : ''}`} tabIndex={0} role="img" aria-label={`${player.name}, ${player.team === 'HOME' ? 'home' : 'away'}, ${player.slotId}, energy ${player.energy}%${carrier ? ', on the ball' : ''}${player.yellowCards ? ', yellow card' : ''}`}>
-    <title>{player.name} · {player.slotId} · {Math.round(player.energy)}% energy</title>
     <g transform={`scale(${position.scale})`}>
       <ellipse className="pitch-person-shadow" cx="3" cy="2" rx="15" ry="5"/>
       <g className="pitch-figure-body">
@@ -118,8 +117,7 @@ export function MatchPitch({ snapshot, frame, minute, event, celebration, decisi
   const players = [...snapshot.players].sort((a, b) => a.y - b.y)
   const title = `${snapshot.possession === 'HOME' ? homeName : awayName} possession. ${event?.detail ?? 'Kick off'}`
   return <figure className={`match-pitch ${celebration ? 'is-goal' : ''}`}>
-    <svg className="match-pitch-scene" viewBox={`${PITCH_VIEW.x} ${PITCH_VIEW.y} ${PITCH_VIEW.width} ${PITCH_VIEW.height}`} role="group" aria-labelledby={`${id}-title`}>
-      <title id={`${id}-title`}>{title}</title>
+    <svg className="match-pitch-scene" viewBox={`${PITCH_VIEW.x} ${PITCH_VIEW.y} ${PITCH_VIEW.width} ${PITCH_VIEW.height}`} role="group" aria-label={title}>
       <defs>
         <radialGradient id={`${id}-ground`}><stop offset="0" stopColor="var(--pitch-ground-light)"/><stop offset="1" stopColor="var(--pitch-ground)"/></radialGradient>
         <linearGradient id={`${id}-grass`} x2="0" y2="1"><stop stopColor="var(--pitch-grass-far)"/><stop offset="1" stopColor="var(--pitch-grass-near)"/></linearGradient>
@@ -160,6 +158,6 @@ export function MatchPitch({ snapshot, frame, minute, event, celebration, decisi
       {decision && <g className={`pitch-offside-label ${decision.offside ? 'flagged' : 'onside'}`}><rect x="390" y="44" width="220" height="32" rx="6"/><text x="500" y="65" textAnchor="middle">At the pass · {decision.offside ? 'Offside' : 'Onside'}</text></g>}
       {celebration && <g className="pitch-score-callout" aria-hidden="true"><text x="500" y="555" textAnchor="middle">GOAL · {celebration.player}</text></g>}
     </svg>
-    <figcaption className="match-pitch-legend"><span className="home"><i/>{homeName}{homeDirection === 1 ? <ArrowRight/> : <ArrowLeft/>}</span><span className="pitch-view-label">Angled match view</span><span className="away">{homeDirection === 1 ? <ArrowLeft/> : <ArrowRight/>}{awayName}<i/></span></figcaption>
+    <figcaption className="match-pitch-legend"><span className="home"><i/>{homeName}{homeDirection === 1 ? <ArrowRight/> : <ArrowLeft/>}</span><span className="pitch-view-label">Angled Match View</span><span className="away">{homeDirection === 1 ? <ArrowLeft/> : <ArrowRight/>}{awayName}<i/></span></figcaption>
   </figure>
 }

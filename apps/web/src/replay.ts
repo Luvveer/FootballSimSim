@@ -18,7 +18,12 @@ export function matchTimeline(result: MatchResult, elapsed: number) {
   const seconds=Math.max(0,Math.min(totalSeconds,elapsed))
   const inHalfTime=breakSeconds>0 && seconds>=halfTime && seconds<halfTime+breakSeconds
   const minute=Math.min(duration,seconds<halfTime?seconds:inHalfTime?halfTime:seconds-breakSeconds)
-  return { minute, progress:minute/duration, half:halfTime/duration, inHalfTime,
+  // The bar has two equal halves. Each fills over its 45 regulation minutes and then holds while added time is played,
+  // so the half-time marker is always in the middle.
+  const regulationHalf=(result.regulationMinutes ?? 90)/2
+  const filled=(playedMinutes:number)=>Math.min(1,Math.max(0,playedMinutes/regulationHalf))
+  const progress=minute<=halfTime ? 0.5*filled(minute) : 0.5+0.5*filled(minute-halfTime)
+  return { minute, progress, half:0.5, inHalfTime,
     breakRemaining:inHalfTime?halfTime+breakSeconds-seconds:0, complete:seconds>=totalSeconds,
     period:(seconds>=halfTime+breakSeconds?2:1) as 1|2, totalSeconds }
 }

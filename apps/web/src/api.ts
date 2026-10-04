@@ -116,16 +116,7 @@ export const lineupSelections = (lineup: Lineup, formation: string) => FORMATION
   fifaVersion: lineup[slot.id]!.version,
 }))
 
-export async function simulateMatch(homeName: string, awayName: string, home: Lineup, away: Lineup, homeFormation: string, awayFormation: string): Promise<MatchResult> {
-  const response = await fetch(apiUrl('/matches/simulate'), {
-    method:'POST', headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify({ seed: Date.now(), durationMinutes:90, homeTeam:{ id:'home', name:homeName, formation:homeFormation, lineup:lineupSelections(home, homeFormation) }, awayTeam:{ id:'away', name:awayName, formation:awayFormation, lineup:lineupSelections(away, awayFormation) } }),
-  })
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { issues?: string[] } | null
-    throw new Error(body?.issues?.[0] ?? 'The match simulation failed.')
-  }
-  const raw = await response.json() as EngineMatchResult
+export function mapEngineResult(raw: EngineMatchResult, homeName: string, awayName: string): MatchResult {
   const names = new Map(raw.playerStats.map((player) => [player.playerId, player.playerName]))
   return {
     durationMinutes: raw.durationMinutes, regulationMinutes: raw.regulationMinutes,
@@ -144,6 +135,18 @@ export async function simulateMatch(homeName: string, awayName: string, home: Li
     playerRatings: raw.playerStats.map((player) => ({ player:player.playerName, playerId:player.playerId, team:player.team === 'AWAY' ? 'away' : 'home', rating:player.rating, yellowCards:player.yellowCards, redCards:player.redCards })),
     manOfTheMatch: { player:raw.manOfTheMatch.playerName, playerId:raw.manOfTheMatch.playerId, team:raw.manOfTheMatch.team === 'AWAY' ? 'away' : 'home', rating:raw.manOfTheMatch.rating },
   }
+}
+
+export async function simulateMatch(homeName: string, awayName: string, home: Lineup, away: Lineup, homeFormation: string, awayFormation: string): Promise<MatchResult> {
+  const response = await fetch(apiUrl('/matches/simulate'), {
+    method:'POST', headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ seed: Date.now(), durationMinutes:90, homeTeam:{ id:'home', name:homeName, formation:homeFormation, lineup:lineupSelections(home, homeFormation) }, awayTeam:{ id:'away', name:awayName, formation:awayFormation, lineup:lineupSelections(away, awayFormation) } }),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { issues?: string[] } | null
+    throw new Error(body?.issues?.[0] ?? 'The match simulation failed.')
+  }
+  return mapEngineResult(await response.json() as EngineMatchResult, homeName, awayName)
 }
 
 function normalizeStats(stats: TeamMatchStats) {

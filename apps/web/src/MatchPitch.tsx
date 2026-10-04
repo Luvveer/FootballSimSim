@@ -6,6 +6,7 @@ import { replayFrame, type ReplayPlayerMotion } from './replay'
 import { GOAL, PITCH_VIEW, goalBallPosition, goalGeometry, pitchCircle, pitchPolygon, projectPitch } from './pitch-geometry'
 import './MatchPitch.css'
 import { BALL_RADIUS, ballRollDegrees, rollingBallPanels } from './ball-appearance'
+import { runningPose } from './running-pose'
 
 type Props = {
   snapshot: ReplaySnapshot
@@ -59,10 +60,7 @@ function PlayerFigure({ player, motion, carrier, throwing }: {
   player: ReplayPlayer; motion?: ReplayPlayerMotion; carrier: boolean; throwing: boolean
 }) {
   const position = projectPitch(player)
-  const facing = motion?.facing ?? 1
-  const activity = Math.min(1, motion?.activity ?? 0)
-  const stride = (motion?.stride ?? 0) * activity * 8
-  const lean = activity * facing * 3
+  const pose = runningPose(motion)
   const parts = player.name.split(' ')
   const last = parts.at(-1) ?? player.name
   const surname = /^(Jr\.?|Sr\.?|II|III)$/.test(last) ? parts.slice(-2).join(' ') : last
@@ -71,10 +69,12 @@ function PlayerFigure({ player, motion, carrier, throwing }: {
     <g transform={`scale(${position.scale})`}>
       <ellipse className="pitch-person-shadow" cx="3" cy="2" rx="15" ry="5"/>
       <g className="pitch-figure-body">
-        <g className="pitch-movement-pose" transform={`translate(${lean} ${-activity * Math.abs(stride) * 0.12})`}>
-          <path className="pitch-limb" d={`M-5,-15 L${-7 - stride},-6 L${-8 - stride},-1 M5,-15 L${7 + stride},-6 L${9 + stride},-1`}/>
-          <path className="pitch-boot" d={`M${-8 - stride},-1 h${-5 * facing} M${9 + stride},-1 h${5 * facing}`}/>
-          <path className="pitch-arm" d={throwing ? 'M-9,-32 L-16,-43 L-5,-51 M9,-32 L16,-43 L5,-51' : `M-9,-32 L${-15 + stride},-23 L${-14 + stride},-18 M9,-32 L${15 - stride},-25 L${16 - stride},-20`}/>
+        <g className="pitch-movement-pose" transform={`translate(${pose.lean} ${-pose.bob})`}>
+          {pose.legs.map(leg => <g key={leg.side}>
+            <path className="pitch-limb" d={leg.path}/>
+            <path className="pitch-boot" d={leg.boot}/>
+          </g>)}
+          <path className="pitch-arm" d={throwing ? 'M-9,-32 L-16,-43 L-5,-51 M9,-32 L16,-43 L5,-51' : pose.arms}/>
           <path className="pitch-shirt" d="M-6,-37 L-13,-32 L-10,-26 L-8,-28 L-8,-17 Q0,-14 8,-17 L8,-28 L10,-26 L13,-32 L6,-37 Z"/>
           <path className="pitch-shirt-detail" d="M-8,-27 H8 M-3,-37 Q0,-32 3,-37"/>
           <path className="pitch-shorts" d="M-8,-18 H8 L9,-12 H2 L0,-16 L-2,-12 H-9 Z"/>

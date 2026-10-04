@@ -64,8 +64,9 @@ const smooth = (value: number) => value * value * (3 - 2 * value)
 
 export interface ReplayPlayerMotion {
   facing: 1 | -1
+  direction: PitchPoint
   activity: number
-  stride: number
+  phase: number
 }
 
 // Event results are revealed at their timestamp. Movement fills the time between
@@ -82,8 +83,27 @@ export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | unde
   let rotation = 0
   let rollDirection: PitchPoint = { x: 1, y: 0 }
   let priorBall = initial?.ball
+  let priorPlayers = initial?.players
+  let priorPeriod = initial?.period
+  const playerTravel = new Map<string, number>()
   for (let index = 0; index < visibleCount; index++) {
     if (index + 1 < visibleCount && events[index + 1]!.minute === events[index]!.minute) continue
+    const players = events[index]!.snapshot?.players
+    if (priorPlayers && players) {
+      const previous = new Map(priorPlayers.map(player => [player.key, player]))
+      // Changing ends is a scene reset, not a sprint across the field.
+      const sceneReset = events[index]!.snapshot?.period !== priorPeriod
+        || events[index]!.snapshot?.status === 'HALF_TIME'
+      if (!sceneReset) for (const player of players) {
+        const old = previous.get(player.key)
+        if (old) playerTravel.set(player.key, (playerTravel.get(player.key) ?? 0)
+          + Math.hypot((player.x - old.x) * 1.05, (player.y - old.y) * 0.68))
+      }
+    }
+    if (players) {
+      priorPlayers = players
+      priorPeriod = events[index]!.snapshot?.period
+    }
     const ball = events[index]!.snapshot?.ball
     if (priorBall && ball) {
       rotation += ballRollDegrees(priorBall, ball)
@@ -163,16 +183,27 @@ export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | unde
     rotation: rotation + ballRollDegrees(from.ball, to.ball) * rollProgress,
     rollDirection,
     loft: throwing ? Math.sin(Math.PI*flight)*0.3 : 0,
-    playerMotion: Object.fromEntries(from.players.map((player, index) => {
+    playerMotion: Object.fromEntries(from.players.map(player => {
       const target = destinations.get(player.key) ?? player
       const dx = target.x - player.x, dy = target.y - player.y
-      const distance = Math.hypot(dx, dy * 0.65)
+      const distance = Math.hypot(dx * 1.05, dy * 0.68)
+      const point = { x: mix(player.x, target.x, movement), y: mix(player.y, target.y, movement) }
+      const a = projectPitch(point), b = projectPitch({ x: point.x + dx * 0.001, y: point.y + dy * 0.001 })
+      const screenDistance = Math.hypot(b.x - a.x, b.y - a.y)
+      const direction = screenDistance > 0.0001
+        ? { x: (b.x - a.x) / screenDistance, y: (b.y - a.y) / screenDistance }
+        : { x: from.direction[player.team], y: 0 }
+      // One cycle per eight metres keeps cadence proportional to travel. The
+      // accumulated phase survives event boundaries and freezes with replay time.
+      const offset = Array.from(player.key).reduce((hash, character) => (hash * 31 + character.charCodeAt(0)) >>> 0, 0) % 628 / 100
+      const phase = ((playerTravel.get(player.key) ?? 0) + distance * movement) * Math.PI * 2 / 8 + offset
       // Pose follows distance traveled, never an independent CSS clock.
       // These are movement cues, not engine-authored sprint claims.
       return [player.key, {
-        facing: Math.abs(dx) > 0.2 ? (dx > 0 ? 1 : -1) : from.direction[player.team],
-        activity: Math.min(1, distance / duration / 9) * 6 * progress * (1 - progress),
-        stride: Math.sin(distance * movement * 0.9 + index * 1.7),
+        facing: Math.abs(direction.x) > 0.05 ? (direction.x > 0 ? 1 : -1) : from.direction[player.team],
+        direction,
+        activity: Math.min(1, distance / duration / 9 * 6 * progress * (1 - progress)),
+        phase,
       } satisfies ReplayPlayerMotion]
     })),
   }

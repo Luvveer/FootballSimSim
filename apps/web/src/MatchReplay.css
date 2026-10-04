@@ -22,3 +22,22 @@
 
 .pitch-stage{position:relative}.half-time-break .live-pitch,.half-time-break .play-insight,.half-time-break .arena-sidebar{filter:blur(6px);opacity:.45;transition:filter .25s,opacity .25s}.half-time-overlay{position:absolute;inset:0;display:grid;place-items:center;z-index:12;text-align:center;padding:20px}.half-time-overlay>div{background:#131710ef;border:1px solid #b99a54;border-radius:16px;box-shadow:0 16px 50px #0006;padding:26px 36px;display:flex;flex-direction:column;align-items:center;gap:12px;max-width:90%}.half-time-overlay p{margin:0;color:#efd174;text-transform:uppercase;letter-spacing:.25em;font-size:12px;font-weight:800}.half-time-overlay strong{font-size:14px;display:flex;gap:14px;align-items:center}.half-time-overlay strong span{color:#f5dc95;white-space:nowrap}.half-time-overlay b{font-family:'Bebas Neue';font-size:64px;line-height:1;color:#f5dc95}.half-time-overlay small{font-size:12px;color:#f0e3c5}.half-time-overlay>div>span{color:#a7b09e;font-size:10px}.restart-location{position:absolute;transform:translate(-50%,-50%);width:28px;height:28px;border:2px dashed #efd174;border-radius:50%;pointer-events:none;z-index:1}.thrower .shirt-marker{border-color:#efd174}.thrower-hands{position:absolute;top:-11px;left:-5px;right:-5px;height:19px;border:3px solid #f0d6a8;border-bottom:0;border-radius:20px 20px 0 0}.thrower.at-bottom .marker-name{top:auto;bottom:40px}.thrower.at-bottom .energy-track{top:auto;bottom:58px}.arena-tactics{background:#1a1918;border:1px solid #37332d;border-radius:14px;overflow:hidden}.tactics-team{display:flex;flex-direction:column;gap:5px;padding:12px 16px;border-top:1px solid #39332a}.tactics-team>b{font-size:12px;color:#fa938b}.tactics-team.away>b{color:#d5dff3}.tactics-team>span{font-size:11px;text-transform:capitalize;color:#e5ce91}.tactics-team>small{font-size:10px;line-height:1.5;color:#a49e91}
 @media(max-width:500px){.half-time-overlay>div{padding:18px 15px;gap:8px}.half-time-overlay strong{font-size:10px;gap:7px}.half-time-overlay b{font-size:44px}.half-time-overlay small{font-size:10px}.half-time-overlay>div>span{font-size:8px}}
+
+/* Match feed as a two-sided timeline: home events on the left, away on the right, symbol on the spine. */
+@media(min-width:48rem){
+  .arena-feed{position:relative}
+  .arena-feed::before{content:"";position:absolute;top:0;bottom:0;left:50%;width:1px;background:#302a25;pointer-events:none}
+  .feed-event{grid-template-columns:minmax(0,1fr) 2.25rem minmax(0,1fr);column-gap:clamp(.75rem,2vw,1.5rem);row-gap:.15rem;position:relative}
+  .feed-event .feed-symbol{grid-column:2;grid-row:1/4;align-self:center;justify-self:center;position:relative;z-index:1;box-shadow:0 0 0 .25rem #191817}
+  .feed-event.home .feed-symbol{background:linear-gradient(#ed635c14,#ed635c14),#191817}
+  .feed-event.away .feed-symbol{background:linear-gradient(#c9d3ed14,#c9d3ed14),#191817}
+  .feed-event.goal .feed-symbol{background:linear-gradient(#c49b3433,#c49b3433),#191817}
+  .feed-event.home time,.feed-event.home>div,.feed-event.home .xg-tag{grid-column:1;text-align:right;justify-self:end}
+  .feed-event.away time,.feed-event.away>div,.feed-event.away .xg-tag{grid-column:3;text-align:left;justify-self:start}
+  .feed-event time{grid-row:1;font-size:.7rem}
+  .feed-event>div{grid-row:2}
+  .feed-event.home>div{align-items:flex-end}
+  .feed-event .xg-tag{grid-row:3}
+}
+
+@media(min-width:48rem){.feed-event.home .feed-symbol .lucide-arrow-right{transform:scaleX(-1)}}

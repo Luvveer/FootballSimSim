@@ -1,6 +1,5 @@
-/** A small RFC 4180 parser so the API does not coerce or discard source fields. */
-export function parseCsv(input: string): string[][] {
-  const rows: string[][] = [];
+/** Iterates RFC 4180 rows without retaining a second copy of the entire CSV in memory. */
+export function* iterateCsv(input: string): Generator<string[]> {
   let row: string[] = [];
   let field = "";
   let quoted = false;
@@ -27,7 +26,7 @@ export function parseCsv(input: string): string[][] {
       field = "";
     } else if (character === "\n") {
       row.push(field);
-      rows.push(row);
+      yield row;
       row = [];
       field = "";
     } else if (character !== "\r") {
@@ -38,8 +37,11 @@ export function parseCsv(input: string): string[][] {
   if (quoted) throw new Error("Invalid CSV: unclosed quoted field");
   if (field.length > 0 || row.length > 0) {
     row.push(field);
-    rows.push(row);
+    yield row;
   }
+}
 
-  return rows;
+/** Convenience helper for small callers and focused parser tests. */
+export function parseCsv(input: string): string[][] {
+  return [...iterateCsv(input)];
 }

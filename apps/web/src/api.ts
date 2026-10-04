@@ -1,5 +1,5 @@
-import { demoPlayers, demoResult } from './data'
-import type { Lineup, MatchResult, Player } from './types'
+import type { MatchResult as EngineMatchResult, MatchEventType, TeamMatchStats } from '@footballsimsim/shared'
+import type { Lineup, MatchEvent, MatchResult, Player } from './types'
 
 const mapPlayer = (raw: Record<string, unknown>, index: number): Player => ({
   id: String(raw.id ?? raw.playerId ?? raw.player_id ?? `${raw.name ?? raw.short_name}-${raw.version ?? raw.fifaVersion ?? index}`),
@@ -17,15 +17,27 @@ const mapPlayer = (raw: Record<string, unknown>, index: number): Player => ({
   physical: Number(raw.physical ?? raw.phy ?? raw.physic ?? (raw.attributes as Record<string,unknown>)?.physical ?? 0), image: typeof raw.image === 'string' ? raw.image : undefined,
 })
 
-export async function fetchPlayers(): Promise<Player[]> {
-  try {
-    const response = await fetch('/api/players')
-    if (!response.ok) throw new Error('Player service unavailable')
-    const body = await response.json()
-    const rows = Array.isArray(body) ? body : body.players
-    if (!Array.isArray(rows) || rows.length < 10) throw new Error('Not enough player data')
-    return rows.map(mapPlayer)
-  } catch { return demoPlayers }
+export interface PlayerPage {
+  players: Player[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export async function fetchPlayers(query = '', position = 'ALL', offset = 0, signal?: AbortSignal): Promise<PlayerPage> {
+  const params = new URLSearchParams({ limit: '40', offset: String(offset) })
+  if (query.trim()) params.set('q', query.trim())
+  if (position !== 'ALL') params.set('position', position)
+  const response = await fetch(`/api/players?${params}`, { signal })
+  if (!response.ok) throw new Error('Could not load players from the API.')
+  const body = await response.json() as { players?: Record<string, unknown>[]; total?: number; limit?: number; offset?: number }
+  if (!Array.isArray(body.players)) throw new Error('The player response is invalid.')
+  return {
+    players: body.players.map(mapPlayer),
+    total: Number(body.total ?? 0),
+    limit: Number(body.limit ?? 40),
+    offset: Number(body.offset ?? offset),
+  }
 }
 
 const selected = (lineup: Lineup) => Object.entries(lineup).map(([slotId, player]) => ({
@@ -36,34 +48,33 @@ const selected = (lineup: Lineup) => Object.entries(lineup).map(([slotId, player
 }))
 
 export async function simulateMatch(homeName: string, awayName: string, home: Lineup, away: Lineup): Promise<MatchResult> {
-  try {
-    const response = await fetch('/api/matches/simulate', {
-      method:'POST', headers:{ 'Content-Type':'application/json' },
-      body: JSON.stringify({ seed: Date.now(), durationMinutes:90, homeTeam:{ id:'home', name:homeName, formation:'1-2-1', lineup:selected(home) }, awayTeam:{ id:'away', name:awayName, formation:'1-2-1', lineup:selected(away) } }),
-    })
-    if (!response.ok) throw new Error('Simulation unavailable')
-    const raw = await response.json() as Record<string, any>
-    if (!raw.finalState || !raw.teamStats) return raw as MatchResult
-    const names = new Map((raw.playerStats ?? []).map((player: any) => [player.playerId, player.playerName]))
-    return {
-      home: { name: homeName, score: raw.finalState.score.home, stats: normalizeStats(raw.teamStats.HOME) },
-      away: { name: awayName, score: raw.finalState.score.away, stats: normalizeStats(raw.teamStats.AWAY) },
-      events: (raw.events ?? []).map((event: any) => ({
-        minute: Math.round(event.minute), type: normalizeEventType(event.type), team: event.team === 'AWAY' ? 'away' : 'home',
-        player: String(names.get(event.playerId) ?? ''), detail: event.description,
-        homeScore: event.score?.home, awayScore: event.score?.away,
-      })),
-      playerRatings: (raw.playerStats ?? []).map((player: any) => ({ player:player.playerName, team:player.team === 'AWAY' ? 'away' : 'home', rating:player.rating })),
-      manOfTheMatch: { player:raw.manOfTheMatch.playerName, rating:raw.manOfTheMatch.rating },
-    }
-  } catch { return demoResult(homeName, awayName) }
+  const response = await fetch('/api/matches/simulate', {
+    method:'POST', headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ seed: Date.now(), durationMinutes:90, homeTeam:{ id:'home', name:homeName, formation:'1-2-1', lineup:selected(home) }, awayTeam:{ id:'away', name:awayName, formation:'1-2-1', lineup:selected(away) } }),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { issues?: string[] } | null
+    throw new Error(body?.issues?.[0] ?? 'The match simulation failed.')
+  }
+  const raw = await response.json() as EngineMatchResult
+  const names = new Map(raw.playerStats.map((player) => [player.playerId, player.playerName]))
+  return {
+    home: { name: homeName, score: raw.finalState.score.home, stats: normalizeStats(raw.teamStats.HOME) },
+    away: { name: awayName, score: raw.finalState.score.away, stats: normalizeStats(raw.teamStats.AWAY) },
+    events: raw.events.map((event) => ({
+      minute: Math.round(event.minute), type: normalizeEventType(event.type), team: event.team === 'AWAY' ? 'away' : 'home',
+      player: String(names.get(event.playerId) ?? ''), detail: event.description,
+      homeScore: event.score.home, awayScore: event.score.away,
+    })),
+    playerRatings: raw.playerStats.map((player) => ({ player:player.playerName, team:player.team === 'AWAY' ? 'away' : 'home', rating:player.rating })),
+    manOfTheMatch: { player:raw.manOfTheMatch.playerName, rating:raw.manOfTheMatch.rating },
+  }
 }
 
-function normalizeStats(stats: Record<string,number>) {
+function normalizeStats(stats: TeamMatchStats) {
   return { possession:stats.possession, shots:stats.shots, shotsOnTarget:stats.shotsOnTarget, passAccuracy:stats.passesAttempted ? Math.round(stats.passesCompleted / stats.passesAttempted * 100) : 0 }
 }
 
-function normalizeEventType(type: string): 'goal'|'save'|'shot'|'card'|'kickoff'|'fulltime' {
-  const normalized = type.toLowerCase()
-  return normalized === 'goal' || normalized === 'save' || normalized === 'shot' ? normalized : 'shot'
+function normalizeEventType(type: MatchEventType): MatchEvent['type'] {
+  return type.toLowerCase() as MatchEvent['type']
 }

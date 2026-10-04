@@ -21,7 +21,7 @@ export type Lineup = Record<Slot, Player | null>
 
 export type MatchEvent = {
   minute: number
-  type: 'goal' | 'save' | 'shot' | 'card' | 'kickoff' | 'fulltime'
+  type: 'pass' | 'interception' | 'dribble' | 'shot' | 'save' | 'goal' | 'kickoff' | 'fulltime'
   team: Side
   player: string
   detail: string

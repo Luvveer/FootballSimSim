@@ -8,7 +8,7 @@ export type MatchEventType =
   | "SAVE"
   | "GOAL";
 
-export type PitchRole = "GK" | "DEF" | "MID" | "FWD" | string;
+export type PitchRole = "GK" | "DEF" | "MID" | "FWD";
 
 export interface PlayerAttributes {
   pace: number;

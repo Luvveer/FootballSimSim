@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseCsv } from "./csv.js";
+import { iterateCsv } from "./csv.js";
 
 export type PlayerRecord = Record<string, string> & {
   player_id: string;
@@ -49,19 +49,22 @@ export function canonicalizePlayers(players: PlayerRecord[]): PlayerRecord[] {
 }
 
 export function parsePlayers(csv: string): PlayerRecord[] {
-  const [headers, ...rows] = parseCsv(csv);
-  if (!headers) return [];
+  const rows = iterateCsv(csv);
+  const first = rows.next();
+  if (first.done) return [];
+  const headers = first.value;
   headers[0] = headers[0]?.replace(/^\uFEFF/, "") ?? "";
 
   const required = ["player_id", "fifa_version", "fifa_update", "short_name", "long_name", "player_positions"];
   const missing = required.filter((field) => !headers.includes(field));
   if (missing.length > 0) throw new Error(`CSV is missing required columns: ${missing.join(", ")}`);
 
-  return canonicalizePlayers(
-    rows.filter((row) => row.some(Boolean)).map((row) =>
-      Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""])) as PlayerRecord,
-    ),
-  );
+  const players: PlayerRecord[] = [];
+  for (const row of rows) {
+    if (!row.some(Boolean)) continue;
+    players.push(Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""])) as PlayerRecord);
+  }
+  return canonicalizePlayers(players);
 }
 
 export function defaultCsvPath(): string {
@@ -70,7 +73,24 @@ export function defaultCsvPath(): string {
 }
 
 export class PlayerRepository {
-  private constructor(private readonly records: PlayerRecord[]) {}
+  private readonly byHistoricalId = new Map<string, PlayerRecord>();
+  private readonly searchIndex: Array<{ record: PlayerRecord; text: string; positions: Set<string> }>;
+  private readonly availableVersions: string[];
+
+  private constructor(private readonly records: PlayerRecord[]) {
+    for (const record of records) {
+      this.byHistoricalId.set(`${record.player_id}\u0000${record.fifa_version}`, record);
+    }
+    this.searchIndex = records.map((record) => ({
+      record,
+      text: [record.short_name, record.long_name, record.club_name, record.nationality_name, record.fifa_version]
+        .join(" ")
+        .toLocaleLowerCase(),
+      positions: new Set(record.player_positions.split(",").map((item) => item.trim().toLocaleUpperCase())),
+    }));
+    this.availableVersions = [...new Set(records.map((player) => player.fifa_version))]
+      .sort((a, b) => numeric(b) - numeric(a));
+  }
 
   static async load(csvPath = defaultCsvPath()): Promise<PlayerRepository> {
     return new PlayerRepository(parsePlayers(await readFile(csvPath, "utf8")));
@@ -81,22 +101,26 @@ export class PlayerRepository {
   }
 
   versions(): string[] {
-    return [...new Set(this.records.map((player) => player.fifa_version))].sort((a, b) => numeric(b) - numeric(a));
+    return this.availableVersions;
   }
 
   find(playerId: string, fifaVersion: string): PlayerRecord | undefined {
-    return this.records.find((player) => player.player_id === playerId && player.fifa_version === fifaVersion);
+    return this.byHistoricalId.get(`${playerId}\u0000${fifaVersion}`);
   }
 
   search({ query = "", version, position, limit = 30, offset = 0 }: PlayerSearch): PlayerPage {
     const needle = query.trim().toLocaleLowerCase();
     const wantedPosition = position?.trim().toLocaleUpperCase();
-    const matching = this.records.filter((player) => {
-      const nameMatches = !needle || `${player.short_name} ${player.long_name}`.toLocaleLowerCase().includes(needle);
-      const versionMatches = !version || player.fifa_version === version;
-      const positions = player.player_positions.split(",").map((item) => item.trim().toLocaleUpperCase());
-      return nameMatches && versionMatches && (!wantedPosition || positions.includes(wantedPosition));
-    });
-    return { players: matching.slice(offset, offset + limit), total: matching.length, limit, offset };
+    const players: PlayerRecord[] = [];
+    let total = 0;
+    for (const indexed of this.searchIndex) {
+      const matches = (!needle || indexed.text.includes(needle))
+        && (!version || indexed.record.fifa_version === version)
+        && (!wantedPosition || indexed.positions.has(wantedPosition));
+      if (!matches) continue;
+      if (total >= offset && players.length < limit) players.push(indexed.record);
+      total += 1;
+    }
+    return { players, total, limit, offset };
   }
 }

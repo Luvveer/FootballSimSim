@@ -151,8 +151,8 @@ export function simulateMatch(config: MatchConfig): MatchResult {
         defenderStats.interceptions += 1;
         teamStats[defendingSide].interceptions += 1;
         emit("INTERCEPTION", defendingSide, defender, true, actor);
+        lastPasser[actingSide] = undefined;
         side = defendingSide;
-        lastPasser[side] = undefined;
       }
     } else if (roll < 0.78) {
       const attackSkill = average(actor.player.attributes.dribbling, actor.player.attributes.ballControl, actor.player.attributes.agility, actor.player.attributes.pace);
@@ -164,8 +164,8 @@ export function simulateMatch(config: MatchConfig): MatchResult {
         actorStats.dribblesCompleted += 1;
         teamStats[side].dribblesCompleted += 1;
       } else {
+        lastPasser[actingSide] = undefined;
         side = defendingSide;
-        lastPasser[side] = undefined;
       }
       emit("DRIBBLE", actingSide, actor, success, defender);
     } else {
@@ -187,6 +187,7 @@ export function simulateMatch(config: MatchConfig): MatchResult {
           goalieStats.saves += 1;
           teamStats[defendingSide].saves += 1;
           emit("SAVE", defendingSide, goalie, true, actor);
+          lastPasser[actingSide] = undefined;
           side = defendingSide;
         } else {
           actorStats.goals += 1;
@@ -194,13 +195,16 @@ export function simulateMatch(config: MatchConfig): MatchResult {
           if (side === "HOME") score.home += 1; else score.away += 1;
           const assisterId = lastPasser[side];
           if (assisterId && assisterId !== actor.player.id) stats.get(`${side}:${assisterId}`)!.assists += 1;
-          emit("GOAL", side, actor, true);
+          const assister = assisterId
+            ? attacking.lineup.find((slot) => slot.player.id === assisterId)
+            : undefined;
+          emit("GOAL", side, actor, true, assister);
+          lastPasser[actingSide] = undefined;
           side = defendingSide;
         }
-        lastPasser[side] = undefined;
       } else if (random() < 0.65) {
+        lastPasser[actingSide] = undefined;
         side = defendingSide;
-        lastPasser[side] = undefined;
       }
     }
   }

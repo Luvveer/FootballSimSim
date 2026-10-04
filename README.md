@@ -31,13 +31,16 @@ From the repository root, run:
 
 ```bash
 npm install
+npm run build
 ```
 
-This installs every npm workspace, including the frontend, API, shared contracts, and simulation engine. No environment file is needed for local development.
+`npm install` installs every workspace, including the frontend, API, shared contracts, and simulation engine. `npm run build` then creates the generated `dist` files used by the workspace imports.
+
+The initial build is required on a fresh clone. The API imports `@footballsimsim/shared` and `@footballsimsim/simulation` from their compiled output, and those `dist` directories are not stored in Git. Without the build, `npm run dev:api` can fail because it cannot resolve those packages. No environment file is needed for local development.
 
 ### Run the application
 
-The frontend and API run as separate development processes. Open two terminals at the repository root.
+After `npm run build` finishes successfully, the frontend and API run as separate development processes. Open two terminals at the repository root.
 
 Terminal 1 starts the API:
 
@@ -58,6 +61,23 @@ npm run dev
 ```
 
 Open `http://localhost:5173` in a browser. Vite forwards requests beginning with `/api` to the local Fastify server, so both development processes must be running to use the real player data and match engine. The frontend has demo fallback data, but that fallback should not be used to verify backend work.
+
+The complete first-time setup order is:
+
+```bash
+npm install
+npm run build
+```
+
+Then keep these running in separate terminals:
+
+```bash
+npm run dev:api
+```
+
+```bash
+npm run dev
+```
 
 ### Verify your changes
 
@@ -86,6 +106,14 @@ The compiled frontend is written to `apps/web/dist`. The compiled API and intern
 | Match simulation | `POST http://localhost:3001/matches/simulate` |
 
 If the API fails during startup, first confirm that `test.csv` exists at the repository root and still has its header row. If the web app shows fallback players, confirm that the API is running on port 3001, then reload the page.
+
+### Large dataset behavior
+
+The same loader supports the current 10-row fixture and the intended dataset of roughly 180,000 rows. The API reads the CSV once at startup, preserves every column, builds indexed historical-player lookups, and precomputes searchable names, clubs, nationalities, versions, and positions.
+
+The player browser requests 40 records at a time. Search and position filters run on the API, and the Load more button requests the next page using `limit` and `offset`. The browser never downloads the full dataset.
+
+This is an in-memory prototype, so API startup and memory use will grow with the CSV. A synthetic 180,000-row load is part of the development verification process. Moving the full dataset into a database remains a later decision, not a requirement for running the simulator.
 
 ## What we are building
 

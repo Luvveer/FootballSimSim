@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Check, ChevronDown, CircleDot, Gauge, Pencil, Play, RotateCcw, Search, Shield, Sparkles, Trophy, X } from 'lucide-react'
 import { fetchPlayers, simulateMatch } from './api'
-import { demoPlayers } from './data'
 import type { Lineup, MatchEvent, MatchResult, Player, Side, Slot } from './types'
 
 const slots: Slot[] = ['ST', 'LM', 'RM', 'CAM', 'GK']
@@ -9,12 +8,14 @@ const emptyLineup = (): Lineup => ({ ST:null, LM:null, RM:null, CAM:null, GK:nul
 
 export function App() {
   const [view, setView] = useState<'builder'|'match'|'result'>('builder')
-  const [players, setPlayers] = useState<Player[]>(demoPlayers)
+  const [players, setPlayers] = useState<Player[]>([])
+  const [playerTotal, setPlayerTotal] = useState(0)
   const [home, setHome] = useState<Lineup>(emptyLineup)
   const [away, setAway] = useState<Lineup>(emptyLineup)
   const [activeSide, setActiveSide] = useState<Side>('home')
   const [activeSlot, setActiveSlot] = useState<Slot>('ST')
   const [query, setQuery] = useState('')
+  const [position, setPosition] = useState('ALL')
   const [result, setResult] = useState<MatchResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [homeName, setHomeName] = useState('Home Team')
@@ -50,6 +51,10 @@ export function App() {
         <div><p className="eyebrow">Build the impossible match</p><h1>Pick your five.</h1><p className="lede">Choose any era. Any position. Settle the argument on the pitch.</p></div>
         <div className="progress-chip"><span>{filled}</span><div><b>of 10 selected</b><small>Two complete teams</small></div></div>
       </section>
+
+      {playersLoading && <div className="status-banner" role="status">Loading historical players…</div>}
+      {playerError && <div className="status-banner error" role="alert"><span>{playerError} Make sure the API is running on port 3001.</span><button onClick={() => setReloadPlayers(value => value + 1)}>Try again</button></div>}
+      {matchError && <div className="status-banner error" role="alert"><span>{matchError}</span><button onClick={() => void start()}>Try match again</button></div>}
 
       <div className="builder-grid">
         <div className="team-column"><TeamHeader side="home" name={homeName} setName={setHomeName} active={activeSide==='home'} onClick={() => setActiveSide('home')} /><Pitch side="home" lineup={home} activeSlot={activeSide==='home' ? activeSlot : null} onSlot={setActiveSlot} onRemove={slot => setHome({...home,[slot]:null})} onActivate={() => setActiveSide('home')} /></div>
@@ -101,7 +106,7 @@ function PlayerBrowser({activeName,players,query,setQuery,activeSide,activeSlot,
     <div className="filter-row" role="group" aria-label="Filter by position">{['ALL','GK','CB','CM','CAM','LW','RW','ST'].map(p=><button className={position===p?'active':''} onClick={()=>setPosition(p)} key={p}>{p}</button>)}</div>
     <div className="player-list">{filtered.length ? filtered.map(player => { const used=Object.values(lineup).some(p=>p?.id===player.id); return <button className="player-card" title={player.fullName ?? player.name} key={player.id} disabled={used} onClick={()=>onSelect(player)}>
       <span className="card-rating"><b>{player.rating}</b><small>{player.position}</small></span><span className="card-avatar">{initials(player.name)}</span><span className="card-identity"><b>{player.name}</b><small>{player.club} · {player.nationality}</small><span>{player.version}</span></span><span className="mini-stats"><small><b>{player.pace}</b>PAC</small><small><b>{player.shooting}</b>SHO</small><small><b>{player.passing}</b>PAS</small></span><span className="add-player">{used?<Check size={16}/>:<span>+</span>}</span>
-    </button>}) : <div className="empty-search"><Search size={26}/><b>No players found</b><span>Try a name, club, or a different position.</span></div>}</div>
+    </button>}) : <div className="empty-search"><Search size={26}/><b>No players found</b><span>Try a name, club, or a different position.</span></div>}{players.length < total && <button className="load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? 'Loading…' : `Load more (${total-players.length} remaining)`}</button>}</div>
     <div className="browser-foot"><span><Sparkles size={15}/> Historical versions are rated independently</span><button onClick={()=>{setQuery('');setPosition('ALL')}}>Clear filters</button></div>
   </section>
 }
@@ -115,7 +120,7 @@ function MatchReplay({result,onComplete}:{result:MatchResult;onComplete:()=>void
   const score=events.reduce((value,e)=>e.homeScore!==undefined?[e.homeScore,e.awayScore??value[1]]:value,[0,0] as number[])
   const latest=events.at(-1)
   return <div className="match-page"><Header step="match"/><main className="match-main"><div className="live-pill"><span/> Live simulation</div><div className="scoreboard"><div><Shield/><b>{result.home.name}</b></div><section><span className="clock">{minute.toString().padStart(2,'0')}:00</span><strong>{score[0]} <i>–</i> {score[1]}</strong><small>{minute>=90?'Full time':'Simulated match'}</small></section><div><Shield/><b>{result.away.name}</b></div></div><div className="match-progress"><span style={{width:`${minute/90*100}%`}}/></div>
-    <div className="match-layout"><section className="commentary-card"><div className="section-heading"><h2>Match commentary</h2><span>90 minute timeline</span></div><div className="event-list" aria-live="polite">{[...events].reverse().map((event,i)=><Event event={event} latest={i===0} key={events.length-1-i}/>)}</div></section><aside className="moment-card"><p className="eyebrow">On the pitch</p><div className="ball-visual"><span className={latest?.team==='away'?'away':''}><CircleDot/></span></div><b>{latest?.player||'Kick off'}</b><p>{latest?.detail}</p><button className="pause-button" onClick={()=>setPaused(p=>!p)}>{paused?<Play size={17}/>:<span className="pause-icon"/>}{paused?'Resume':'Pause match'}</button></aside></div></main></div>
+    <p className="sr-only" aria-live="polite">{latest ? `${latest.minute} minutes. ${latest.detail}` : 'Kick off'}</p><div className="match-layout"><section className="commentary-card"><div className="section-heading"><h2>Match commentary</h2><span>90 minute timeline</span></div><div className="event-list">{[...events].reverse().map((event,i)=><Event event={event} latest={i===0} key={events.length-1-i}/>)}</div></section><aside className="moment-card"><p className="eyebrow">On the pitch</p><div className="ball-visual"><span className={latest?.team==='away'?'away':''}><CircleDot/></span></div><b>{latest?.player||'Kick off'}</b><p>{latest?.detail}</p><button className="pause-button" onClick={()=>setPaused(p=>!p)}>{paused?<Play size={17}/>:<span className="pause-icon"/>}{paused?'Resume':'Pause match'}</button></aside></div></main></div>
 }
 
 function Event({event,latest}:{event:MatchEvent;latest:boolean}) { return <article className={`event ${event.type} ${latest?'latest':''}`}><time>{event.minute}'</time><span className="event-icon">{event.type==='goal'?<CircleDot/>:event.type==='save'?<Shield/>:<ChevronDown/>}</span><div><b>{event.type==='goal'?'GOAL':event.type.toUpperCase()} {event.player&&`· ${event.player}`}</b><p>{event.detail}</p></div></article> }
@@ -123,7 +128,7 @@ function Event({event,latest}:{event:MatchEvent;latest:boolean}) { return <artic
 function Results({result,onReplay,onReset}:{result:MatchResult;onReplay:()=>void;onReset:()=>void}) {
   const rows:[string,keyof typeof result.home.stats][]=[['Possession','possession'],['Shots','shots'],['On target','shotsOnTarget'],['Pass accuracy','passAccuracy']]
   return <div className="results-page"><Header step="result"/><main className="results-main"><p className="eyebrow">Full time</p><h1>What a finish.</h1><section className="final-score"><div><Shield/><b>{result.home.name}</b><span>Home</span></div><strong>{result.home.score} <i>–</i> {result.away.score}</strong><div><Shield/><b>{result.away.name}</b><span>Away</span></div></section>
-    <div className="result-grid"><section className="stats-panel"><div className="section-heading"><h2>Match stats</h2><span>Final numbers</span></div>{rows.map(([label,key])=>{const h=result.home.stats[key],a=result.away.stats[key];const suffix=key==='possession'||key==='passAccuracy'?'%':'';return <div className="stat-row" key={key}><div><b>{h}{suffix}</b><div className="bar home"><span style={{width:`${h/(h+a)*100}%`}}/></div></div><span>{label}</span><div><div className="bar away"><span style={{width:`${a/(h+a)*100}%`}}/></div><b>{a}{suffix}</b></div></div>})}</section><aside className="motm"><Trophy/><p className="eyebrow">Player of the match</p><div className="motm-avatar">{initials(result.manOfTheMatch?.player||'Player')}</div><h2>{result.manOfTheMatch?.player}</h2><strong>{result.manOfTheMatch?.rating.toFixed(1)}</strong><span>Match rating</span></aside></div>
+    <div className="result-grid"><section className="stats-panel"><div className="section-heading"><h2>Match stats</h2><span>Final numbers</span></div>{rows.map(([label,key])=>{const h=result.home.stats[key],a=result.away.stats[key];const total=h+a;const homeWidth=total>0?h/total*100:50;const awayWidth=total>0?a/total*100:50;const suffix=key==='possession'||key==='passAccuracy'?'%':'';return <div className="stat-row" key={key}><div><b>{h}{suffix}</b><div className="bar home"><span style={{width:`${homeWidth}%`}}/></div></div><span>{label}</span><div><div className="bar away"><span style={{width:`${awayWidth}%`}}/></div><b>{a}{suffix}</b></div></div>})}</section><aside className="motm"><Trophy/><p className="eyebrow">Player of the match</p><div className="motm-avatar">{initials(result.manOfTheMatch?.player||'Player')}</div><h2>{result.manOfTheMatch?.player}</h2><strong>{result.manOfTheMatch?.rating.toFixed(1)}</strong><span>Match rating</span></aside></div>
     <div className="result-actions"><button className="secondary-button" onClick={onReset}><ArrowLeft/>Edit teams</button><button className="start-button" onClick={onReplay}><RotateCcw/>Watch replay</button></div></main></div>
 }
 

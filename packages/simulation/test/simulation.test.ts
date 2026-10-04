@@ -65,4 +65,23 @@ describe("simulateMatch", () => {
     flexible.homeTeam.lineup[1]!.player.positions = ["FWD"];
     expect(() => validateMatchConfig(flexible)).not.toThrow();
   });
+
+  it("never carries an assist across a change of possession", () => {
+    for (let seed = 0; seed < 250; seed += 1) {
+      const result = simulateMatch(config(`assist-regression-${seed}`));
+      for (const [index, event] of result.events.entries()) {
+        if (event.type !== "GOAL" || !event.secondaryPlayerId) continue;
+        let matchingPassFound = false;
+        for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+          const prior = result.events[cursor]!;
+          if (prior.team !== event.team) break;
+          if (prior.type === "PASS" && prior.successful && prior.playerId === event.secondaryPlayerId) {
+            matchingPassFound = true;
+            break;
+          }
+        }
+        expect(matchingPassFound, `seed ${seed}, goal ${event.id}`).toBe(true);
+      }
+    }
+  });
 });

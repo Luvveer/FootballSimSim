@@ -79,11 +79,21 @@ function requiredString(value: unknown, path: string, issues: string[]): string 
   return value.trim();
 }
 
+function pitchRole(value: unknown, path: string, issues: string[]): PitchRole {
+  const role = requiredString(value, path, issues).toUpperCase();
+  if (!(["GK", "DEF", "MID", "FWD"] as const).includes(role as PitchRole)) {
+    issues.push(`${path} must be GK, DEF, MID, or FWD`);
+  }
+  return role as PitchRole;
+}
+
 function buildTeam(value: unknown, path: string, repository: PlayerRepository, issues: string[]): Team {
   const team = value && typeof value === "object" ? value as TeamSelection : {};
   const id = requiredString(team.id, `${path}.id`, issues);
   const name = requiredString(team.name, `${path}.name`, issues);
   const formation = requiredString(team.formation, `${path}.formation`, issues);
+  if (name.length > 60) issues.push(`${path}.name must be 60 characters or fewer`);
+  if (formation && formation !== "1-2-1") issues.push(`${path}.formation must be 1-2-1`);
   const selections = Array.isArray(team.lineup) ? team.lineup as LineupSelection[] : [];
   if (!Array.isArray(team.lineup)) issues.push(`${path}.lineup must be an array`);
   if (selections.length !== TEAM_SIZE) issues.push(`${path}.lineup must contain exactly ${TEAM_SIZE} players`);
@@ -91,7 +101,7 @@ function buildTeam(value: unknown, path: string, repository: PlayerRepository, i
   const lineup = selections.map((selection, index) => {
     const prefix = `${path}.lineup[${index}]`;
     const slotId = requiredString(selection?.slotId, `${prefix}.slotId`, issues);
-    const role = requiredString(selection?.role, `${prefix}.role`, issues) as PitchRole;
+    const role = pitchRole(selection?.role, `${prefix}.role`, issues);
     const playerId = typeof selection?.playerId === "number" ? String(selection.playerId) : requiredString(selection?.playerId, `${prefix}.playerId`, issues);
     const fifaVersion = typeof selection?.fifaVersion === "number" ? String(selection.fifaVersion) : requiredString(selection?.fifaVersion, `${prefix}.fifaVersion`, issues);
     const record = repository.find(playerId, fifaVersion);
@@ -101,6 +111,8 @@ function buildTeam(value: unknown, path: string, repository: PlayerRepository, i
 
   const goalkeepers = lineup.filter((slot) => slot.role.toUpperCase() === "GK").length;
   if (goalkeepers !== 1) issues.push(`${path}.lineup must contain exactly one GK role`);
+  const slotIds = lineup.map((slot) => slot.slotId).filter(Boolean);
+  if (new Set(slotIds).size !== slotIds.length) issues.push(`${path}.lineup slot IDs must be unique`);
 
   return { id, name, formation, lineup };
 }

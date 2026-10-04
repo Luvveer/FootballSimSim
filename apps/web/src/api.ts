@@ -15,6 +15,27 @@ const mapGk = (raw: Record<string, unknown>): Player['gk'] => {
   return Object.values(gk).some(value => value !== undefined) ? gk : undefined
 }
 
+const optionalText = (value: unknown): string | undefined => typeof value === 'string' && value.trim() ? value.trim() : undefined
+
+const mapAttributes = (raw: Record<string, unknown>): Player['attributes'] => {
+  const attributes = {
+    finishing: optionalNumber(raw.attacking_finishing), positioning: optionalNumber(raw.mentality_positioning), penalties: optionalNumber(raw.mentality_penalties),
+    ballControl: optionalNumber(raw.skill_ball_control), vision: optionalNumber(raw.mentality_vision), composure: optionalNumber(raw.mentality_composure), reactions: optionalNumber(raw.movement_reactions),
+    agility: optionalNumber(raw.movement_agility), stamina: optionalNumber(raw.power_stamina), strength: optionalNumber(raw.power_strength),
+    interceptions: optionalNumber(raw.mentality_interceptions), standingTackle: optionalNumber(raw.defending_standing_tackle), aggression: optionalNumber(raw.mentality_aggression),
+  }
+  return Object.values(attributes).some(value => value !== undefined) ? attributes : undefined
+}
+
+const mapProfile = (raw: Record<string, unknown>): Player['profile'] => {
+  const profile = {
+    age: optionalNumber(raw.age), heightCm: optionalNumber(raw.height_cm), weightKg: optionalNumber(raw.weight_kg), foot: optionalText(raw.preferred_foot),
+    jersey: optionalNumber(raw.club_jersey_number), bodyType: optionalText(raw.body_type), weakFoot: optionalNumber(raw.weak_foot), skillMoves: optionalNumber(raw.skill_moves),
+    reputation: optionalNumber(raw.international_reputation), workRate: optionalText(raw.work_rate),
+  }
+  return Object.values(profile).some(value => value !== undefined) ? profile : undefined
+}
+
 export const mapPlayer = (raw: Record<string, unknown>, index: number): Player => {
   const sourcePositions = Array.isArray(raw.positions)
     ? raw.positions.map(String)
@@ -44,6 +65,8 @@ export const mapPlayer = (raw: Record<string, unknown>, index: number): Player =
     defending: Number(raw.defending ?? raw.def ?? (raw.attributes as Record<string,unknown>)?.defending ?? 0),
     physical: Number(raw.physical ?? raw.phy ?? raw.physic ?? (raw.attributes as Record<string,unknown>)?.physical ?? 0), image: typeof raw.image === 'string' ? raw.image : undefined,
     gk: mapGk(raw),
+    attributes: mapAttributes(raw),
+    profile: mapProfile(raw),
   }
 }
 
@@ -62,10 +85,18 @@ export async function fetchPlayerVersions(playerId: string, signal?: AbortSignal
   return body.players.map(mapPlayer)
 }
 
-export async function fetchPlayers(query = '', position: PitchRole | 'ALL' = 'ALL', offset = 0, signal?: AbortSignal): Promise<PlayerPage> {
+export async function fetchVersions(signal?: AbortSignal): Promise<string[]> {
+  const response = await fetch(apiUrl('/players/versions'), { signal })
+  if (!response.ok) throw new Error('Could not load FIFA versions.')
+  const body = await response.json() as { versions?: string[] }
+  return Array.isArray(body.versions) ? body.versions : []
+}
+
+export async function fetchPlayers(query = '', position: PitchRole | 'ALL' = 'ALL', offset = 0, signal?: AbortSignal, versions: string[] = []): Promise<PlayerPage> {
   const params = new URLSearchParams({ limit: '40', offset: String(offset) })
   if (query.trim()) params.set('q', query.trim())
   if (position !== 'ALL') params.set('position', position)
+  if (versions.length) params.set('version', versions.join(','))
   const response = await fetch(apiUrl(`/players?${params}`), { signal })
   if (!response.ok) throw new Error('Could not load players from the API.')
   const body = await response.json() as { players?: Record<string, unknown>[]; total?: number; limit?: number; offset?: number }

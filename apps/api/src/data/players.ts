@@ -201,7 +201,7 @@ export class PlayerRepository {
     this.searchIndex = records.map((record) => ({
       record,
       text: normalizeSearch([record.short_name, record.long_name, record.club_name, record.nationality_name,
-        record.fifa_version, `FIFA ${Number(record.fifa_version)}`, String(2000 + Number(record.fifa_version))].join(" ")),
+        record.fifa_version, `FIFA ${Number(record.fifa_version)}`, ...([23, 24].includes(Number(record.fifa_version)) ? [`FC ${Number(record.fifa_version)}`] : []), String(2000 + Number(record.fifa_version))].join(" ")),
       roleMask: roleMask(playerRoles(record)),
     }));
     this.availableVersions = [...new Set(records.map((player) => player.fifa_version))]
@@ -243,6 +243,8 @@ export class PlayerRepository {
 
   search({ query = "", version, position, limit = 30, offset = 0 }: PlayerSearch): PlayerPage {
     const terms = normalizeSearch(query).split(/\s+/).filter(Boolean);
+    // `version` may be a comma-separated list, e.g. "24.0,23.0".
+    const wantedVersions = version ? new Set(version.split(",").map((item) => item.trim()).filter(Boolean)) : undefined;
     const requestedPosition = position?.trim().toUpperCase();
     const wantedRole = requestedPosition && isPitchRole(requestedPosition) ? requestedPosition : undefined;
     const wantedRoleBit = wantedRole ? ROLE_BITS[wantedRole] : 0;
@@ -250,7 +252,7 @@ export class PlayerRepository {
     let total = 0;
     for (const indexed of this.searchIndex) {
       const matches = terms.every((term) => indexed.text.includes(term))
-        && (!version || indexed.record.fifa_version === version)
+        && (!wantedVersions?.size || wantedVersions.has(indexed.record.fifa_version))
         && (!requestedPosition || (wantedRoleBit !== 0 && (indexed.roleMask & wantedRoleBit) !== 0));
       if (!matches) continue;
       if (total >= offset && players.length < limit) players.push(indexed.record);

@@ -53,8 +53,15 @@ describe("API routes", () => {
   it("simulates a valid five-a-side match", async () => {
     const response = await app.inject({ method: "POST", url: "/matches/simulate", payload: matchBody });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ seed: "route-test", durationMinutes: 90 });
-    expect(response.json().events.length).toBeGreaterThan(0);
+    expect(response.json()).toMatchObject({ seed: "route-test", regulationMinutes: 90, ruleset: "CUSTOM_FIVE_A_SIDE_FOOTBALL" });
+    const result = response.json();
+    expect(result.durationMinutes).toBe(90 + result.addedTime.firstHalf + result.addedTime.secondHalf);
+    expect(result.events.length).toBeGreaterThan(0);
+    expect(result.initialSnapshot.players).toHaveLength(10);
+    expect(result.initialSnapshot.teamStats.HOME.shots).toBe(0);
+    expect(result.teamProfiles.HOME).toHaveProperty("goalkeeping");
+    expect(result.events.at(-1).snapshot.teamStats.HOME.shots).toBe(result.teamStats.HOME.shots);
+    expect(result.events.at(-1).score).toEqual(result.finalState.score);
   });
 
   it("rejects duplicate lineup slot IDs", async () => {

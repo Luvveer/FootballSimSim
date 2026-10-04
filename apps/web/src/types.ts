@@ -1,3 +1,4 @@
+import type { MatchEventType, OffsideDecision, ReplaySnapshot, RestartType, TeamProfile } from '@footballsimsim/shared'
 export type Player = {
   id: string
   name: string
@@ -20,12 +21,19 @@ export type Lineup = Record<Slot, Player | null>
 
 export type MatchEvent = {
   minute: number
-  type: 'pass' | 'interception' | 'dribble' | 'shot' | 'save' | 'goal' | 'kickoff' | 'fulltime'
+  type: Lowercase<MatchEventType> | 'fulltime'
   team: Side
   player: string
+  playerId?: string
   detail: string
   homeScore?: number
   awayScore?: number
+  snapshot?: ReplaySnapshot
+  explanation?: string
+  successful?: boolean
+  expectedGoals?: number
+  offside?: OffsideDecision
+  restart?: RestartType
 }
 
 export type TeamStats = {
@@ -33,12 +41,27 @@ export type TeamStats = {
   shots: number
   shotsOnTarget: number
   passAccuracy: number
+  expectedGoals?: number
+  fouls?: number
+  offsides?: number
+  corners?: number
+  yellowCards?: number
+  redCards?: number
+  freeKicks?: number
+  penalties?: number
 }
 
 export type MatchResult = {
+  durationMinutes?: number
+  regulationMinutes?: number
+  halfTimeMinute?: number
+  addedTime?: { firstHalf: number; secondHalf: number }
+  status?: 'COMPLETED' | 'ABANDONED'
   home: { name: string; score: number; stats: TeamStats }
   away: { name: string; score: number; stats: TeamStats }
   events: MatchEvent[]
-  playerRatings?: { player: string; team: Side; rating: number }[]
-  manOfTheMatch?: { player: string; rating: number }
+  initialSnapshot?: ReplaySnapshot
+  teamProfiles?: Record<'HOME' | 'AWAY', TeamProfile>
+  playerRatings?: { player: string; playerId?: string; team: Side; rating: number; yellowCards?: number; redCards?: number }[]
+  manOfTheMatch?: { player: string; playerId?: string; team?: Side; rating: number }
 }

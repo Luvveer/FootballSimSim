@@ -2,6 +2,7 @@ import type { PitchPoint, ReplaySnapshot } from '@footballsimsim/shared'
 import type { MatchEvent, MatchResult } from './types'
 import { ballRollDegrees } from './ball-appearance'
 import { projectPitch } from './pitch-geometry'
+import { shotAnimation, type GoalkeeperMotion } from './goalkeeper-animation'
 
 export const HALF_TIME_BREAK_SECONDS = 5
 
@@ -71,7 +72,7 @@ export interface ReplayPlayerMotion {
 
 // Event results are revealed at their timestamp. Movement fills the time between
 // those timestamps, so pause and speed controls share the same animation clock.
-export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | undefined, minute: number, holdHalfTime = false) {
+function baseReplayFrame(events: MatchEvent[], initial: ReplaySnapshot | undefined, minute: number, holdHalfTime = false) {
   const halfIndex=holdHalfTime?events.findIndex(event=>event.type==='half_time'):-1
   let low = 0, high = halfIndex>=0?halfIndex+1:events.length
   while (low < high) {
@@ -126,7 +127,7 @@ export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | unde
   const startMinute = latest?.minute ?? 0
   const duration = next ? next.minute - startMinute : 0
   const progress = duration > 0 ? Math.min(1, Math.max(0, (minute - startMinute) / duration)) : 1
-  const still = { visibleCount, snapshot: from, path: undefined, rotation, rollDirection, loft: 0, playerMotion: {} as Record<string, ReplayPlayerMotion> }
+  const still = { visibleCount, snapshot: from, path: undefined, rotation, baseRotation: rotation, rollDirection, loft: 0, playerMotion: {} as Record<string, ReplayPlayerMotion> }
   if (!from || !next?.snapshot || !duration) return still
   const to = next.snapshot
   // A half-time break holds the pitch until the new kickoff. Do not animate
@@ -181,6 +182,7 @@ export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | unde
     }) },
     path: distance > 3 && (!pass || flightProgress > 0) ? { from: release, to: to.ball, progress: flight } : undefined,
     rotation: rotation + ballRollDegrees(from.ball, to.ball) * rollProgress,
+    baseRotation: rotation,
     rollDirection,
     loft: throwing ? Math.sin(Math.PI*flight)*0.3 : 0,
     playerMotion: Object.fromEntries(from.players.map(player => {
@@ -206,5 +208,26 @@ export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | unde
         phase,
       } satisfies ReplayPlayerMotion]
     })),
+  }
+}
+
+export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | undefined, minute: number, holdHalfTime = false) {
+  const frame = baseReplayFrame(events, initial, minute, holdHalfTime)
+  const animation = shotAnimation(events, initial, minute, frame.visibleCount, frame.snapshot, holdHalfTime)
+  const keeperMotion: Record<string, GoalkeeperMotion> = {}
+  if (!animation || !frame.snapshot) return { ...frame, keeperMotion, shotActive: false }
+  if (animation.keeperActive) keeperMotion[animation.keeper.key] = animation.motion
+  const a = projectPitch(animation.from), b = projectPitch(animation.ball)
+  return { ...frame,
+    snapshot: { ...frame.snapshot, ball: animation.ball,
+      carrierKey: animation.airborne ? undefined : frame.snapshot.carrierKey,
+      players: frame.snapshot.players.map(player => player.key === animation.keeper.key ? { ...player, x: animation.keeper.x, y: animation.keeper.y }
+        : player.key === animation.shooter?.key ? { ...player, x: animation.shooter.x, y: animation.shooter.y } : player),
+    },
+    loft: animation.loft,
+    rotation: animation.airborne ? frame.rotation : frame.baseRotation,
+    rollDirection: { x: b.x - a.x, y: b.y - a.y },
+    keeperMotion,
+    shotActive: true,
   }
 }

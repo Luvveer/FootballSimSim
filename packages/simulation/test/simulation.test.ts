@@ -35,6 +35,20 @@ const config = (seed: string): MatchConfig => ({
 });
 
 describe("football match lifecycle", () => {
+  it("records shot release geometry without replacing the resolved snapshot", () => {
+    const result = simulateMatch(config("shot-animation"));
+    const shots = result.events.filter(event => event.type === "SHOT");
+    expect(shots.length).toBeGreaterThan(0);
+    for (const shot of shots) {
+      expect(shot.ballMotion?.kind).toBe("SHOT");
+      expect(shot.ballMotion?.to).toEqual(shot.snapshot.ball);
+      expect(shot.ballMotion?.to).not.toBe(shot.snapshot.ball);
+      expect(shot.ballMotion?.from.x).toBeGreaterThanOrEqual(0);
+      expect(shot.ballMotion?.from.x).toBeLessThanOrEqual(100);
+      expect(shot.ballMotion?.from.y).toBeGreaterThanOrEqual(0);
+      expect(shot.ballMotion?.from.y).toBeLessThanOrEqual(100);
+    }
+  });
   it("plays two halves with opposite kickoff teams, switched ends and added time", () => {
     const result = simulateMatch(config("rules-halves"));
     const half = result.events.find(e=>e.type==="HALF_TIME")!;

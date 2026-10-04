@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useId, type CSSProperties } from 'react'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import type { OffsideDecision, PitchPoint, ReplayPlayer, ReplaySnapshot } from '@footballsimsim/shared'
 import type { MatchEvent } from './types'
@@ -7,6 +7,7 @@ import { GOAL, PITCH_VIEW, goalBallPosition, goalGeometry, pitchCircle, pitchPol
 import './MatchPitch.css'
 import { BALL_RADIUS, ballRollDegrees, rollingBallPanels } from './ball-appearance'
 import { runningPose } from './running-pose'
+import { goalkeeperPose, type GoalkeeperMotion } from './goalkeeper-animation'
 
 type Props = {
   snapshot: ReplaySnapshot
@@ -56,11 +57,17 @@ function Goal({ end, front = false, celebrating = false }: { end: 0 | 100; front
   </g>
 }
 
-function PlayerFigure({ player, motion, carrier, throwing }: {
-  player: ReplayPlayer; motion?: ReplayPlayerMotion; carrier: boolean; throwing: boolean
+function PlayerFigure({ player, motion, keeperMotion, carrier, throwing }: {
+  player: ReplayPlayer; motion?: ReplayPlayerMotion; keeperMotion?: GoalkeeperMotion; carrier: boolean; throwing: boolean
 }) {
   const position = projectPitch(player)
-  const pose = runningPose(motion)
+  const dive = keeperMotion && goalkeeperPose(keeperMotion)
+  const pose = dive ?? runningPose(motion)
+  const keeperStyle = keeperMotion ? {
+    '--dive-x': `${keeperMotion.offset.x}px`, '--dive-y': `${keeperMotion.offset.y}px`,
+    '--dive-mobile-x': `${keeperMotion.mobileOffset.x}px`, '--dive-mobile-y': `${keeperMotion.mobileOffset.y}px`,
+    '--dive-angle': `${keeperMotion.rotation}deg`,
+  } as CSSProperties : undefined
   const parts = player.name.split(' ')
   const last = parts.at(-1) ?? player.name
   const surname = /^(Jr\.?|Sr\.?|II|III)$/.test(last) ? parts.slice(-2).join(' ') : last
@@ -70,17 +77,20 @@ function PlayerFigure({ player, motion, carrier, throwing }: {
       <ellipse className="pitch-person-shadow" cx="3" cy="2" rx="15" ry="5"/>
       <g className="pitch-figure-body">
         <g className="pitch-movement-pose" transform={`translate(${pose.lean} ${-pose.bob})`}>
-          {pose.legs.map(leg => <g key={leg.side}>
-            <path className="pitch-limb" d={leg.path}/>
-            <path className="pitch-boot" d={leg.boot}/>
-          </g>)}
-          <path className="pitch-arm" d={throwing ? 'M-9,-32 L-16,-43 L-5,-51 M9,-32 L16,-43 L5,-51' : pose.arms}/>
-          <path className="pitch-shirt" d="M-6,-37 L-13,-32 L-10,-26 L-8,-28 L-8,-17 Q0,-14 8,-17 L8,-28 L10,-26 L13,-32 L6,-37 Z"/>
-          <path className="pitch-shirt-detail" d="M-8,-27 H8 M-3,-37 Q0,-32 3,-37"/>
-          <path className="pitch-shorts" d="M-8,-18 H8 L9,-12 H2 L0,-16 L-2,-12 H-9 Z"/>
-          <circle className="pitch-head" cx="0" cy="-44" r="6.5"/>
-          <path className="pitch-hair" d="M-6,-45 Q-5,-53 2,-50 Q6,-49 6,-44 L3,-46 L-5,-45 Z"/>
-          {player.yellowCards > 0 && <rect className="pitch-yellow-card" x="13" y="-40" width="5" height="8" rx="1"/>}
+          <g className={keeperMotion ? 'pitch-keeper-pose' : undefined} style={keeperStyle} data-keeper-stage={keeperMotion?.stage}>
+            {pose.legs.map(leg => <g key={leg.side}>
+              <path className="pitch-limb" d={leg.path}/>
+              <path className="pitch-boot" d={leg.boot}/>
+            </g>)}
+            <path className="pitch-arm" d={throwing ? 'M-9,-32 L-16,-43 L-5,-51 M9,-32 L16,-43 L5,-51' : pose.arms}/>
+            {dive?.hands.map((hand, index) => <circle key={index} className="pitch-keeper-glove" cx={hand.x} cy={hand.y} r="3.2"/>)}
+            <path className="pitch-shirt" d="M-6,-37 L-13,-32 L-10,-26 L-8,-28 L-8,-17 Q0,-14 8,-17 L8,-28 L10,-26 L13,-32 L6,-37 Z"/>
+            <path className="pitch-shirt-detail" d="M-8,-27 H8 M-3,-37 Q0,-32 3,-37"/>
+            <path className="pitch-shorts" d="M-8,-18 H8 L9,-12 H2 L0,-16 L-2,-12 H-9 Z"/>
+            <circle className="pitch-head" cx="0" cy="-44" r="6.5"/>
+            <path className="pitch-hair" d="M-6,-45 Q-5,-53 2,-50 Q6,-49 6,-44 L3,-46 L-5,-45 Z"/>
+            {player.yellowCards > 0 && <rect className="pitch-yellow-card" x="13" y="-40" width="5" height="8" rx="1"/>}
+          </g>
         </g>
       </g>
     </g>
@@ -110,7 +120,7 @@ export function MatchPitch({ snapshot, frame, minute, event, celebration, decisi
   const id = useId().replaceAll(':', '')
   const homeDirection = snapshot.direction.HOME
   const scoringDirection = celebration?.snapshot?.direction[celebration.team === 'home' ? 'HOME' : 'AWAY'] ?? (celebration?.team === 'home' ? homeDirection : -homeDirection)
-  const ballPoint = event?.type === 'goal' && snapshot.phase === 'GOAL'
+  const ballPoint = !frame.shotActive && event?.type === 'goal' && snapshot.phase === 'GOAL'
     ? goalBallPosition(snapshot.ball, snapshot.direction[event.team === 'home' ? 'HOME' : 'AWAY'], minute - event.minute)
     : snapshot.ball
   const players = [...snapshot.players].sort((a, b) => a.y - b.y)
@@ -152,7 +162,7 @@ export function MatchPitch({ snapshot, frame, minute, event, celebration, decisi
       {[...players.map(player => ({ kind: 'player' as const, depth: player.y, player })), { kind: 'ball' as const, depth: ballPoint.y }]
         .sort((a, b) => a.depth - b.depth)
         .map(item => item.kind === 'ball' ? <Ball key="ball" point={ballPoint} loft={frame.loft} rotation={frame.rotation + ballRollDegrees(snapshot.ball, ballPoint)} direction={frame.rollDirection}/>
-          : <PlayerFigure key={item.player.key} player={item.player} motion={frame.playerMotion[item.player.key]} carrier={item.player.key === snapshot.carrierKey} throwing={snapshot.restart?.type === 'THROW_IN' && snapshot.restart.takerKey === item.player.key && snapshot.restart.ready}/>)}
+          : <PlayerFigure key={item.player.key} player={item.player} motion={frame.playerMotion[item.player.key]} keeperMotion={frame.keeperMotion[item.player.key]} carrier={item.player.key === snapshot.carrierKey} throwing={snapshot.restart?.type === 'THROW_IN' && snapshot.restart.takerKey === item.player.key && snapshot.restart.ready}/>)}
       <Goal end={0} front/><Goal end={100} front/>
       {decision && <g className={`pitch-offside-label ${decision.offside ? 'flagged' : 'onside'}`}><rect x="390" y="44" width="220" height="32" rx="6"/><text x="500" y="65" textAnchor="middle">At the pass · {decision.offside ? 'Offside' : 'Onside'}</text></g>}
       {celebration && <g className="pitch-score-callout" aria-hidden="true"><text x="500" y="555" textAnchor="middle">GOAL · {celebration.player}</text></g>}

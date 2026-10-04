@@ -258,8 +258,9 @@ export function simulateMatch(config: MatchConfig): MatchResult {
     teamStats[side].expectedGoals = Math.round((teamStats[side].expectedGoals + xg) * 1000) / 1000;
     if (onTarget) { actorStats.shotsOnTarget++; teamStats[side].shotsOnTarget++; }
     const location = kind === "PENALTY" ? "from the penalty spot" : kind === "FREE_KICK" ? "from the free kick" : progress > 0.78 ? "inside the area" : "from distance";
-    emit("SHOT", side, actor, onTarget, `${name(actor)} shoots ${location}${blocked ? " — blocked." : onTarget ? "." : " — wide of the goal."}`,
+    const shot = emit("SHOT", side, actor, onTarget, `${name(actor)} shoots ${location}${blocked ? " — blocked." : onTarget ? "." : " — wide of the goal."}`,
       `Finishing ${Math.round(shooting)} vs keeper ${Math.round(keeping)} · distance ${Math.round(goalDistance)} pitch units · ${Math.round(xg * 100)}% goal chance.`, undefined, targetProbability, xg);
+    shot.ballMotion = { kind: "SHOT", from: { ...ball }, to: { ...shot.snapshot.ball } };
     if (blocked) {
       const blocker = weightedSelect(field(defendingSide), slot => Math.max(5, effective(slot, "defending")), random);
       emit("BLOCK", defendingSide, blocker, true, `${name(blocker)} blocks the shot.`, "The defender gets between the shot and the goal.", actor);

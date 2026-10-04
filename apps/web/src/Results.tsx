@@ -6,7 +6,7 @@ import { matchClock } from './replay'
 
 const initials = (name: string) => name.trim().split(/\s+/).filter(word=>!['da','de','dos','do'].includes(word.toLowerCase())).slice(0,2).map(word=>word[0]).join('')
 
-export function Results({result,onReplay,onReset}:{result:MatchResult;onReplay:()=>void;onReset:()=>void}) {
+export function Results({result,onReplay,onReset,onHome,onBuild}:{result:MatchResult;onReplay:()=>void;onReset:()=>void;onHome:()=>void;onBuild:()=>void}) {
   const abandoned = result.status === 'ABANDONED'
   const draw = result.home.score === result.away.score
   const winningSide: Side = result.home.score > result.away.score ? 'home' : 'away'
@@ -23,8 +23,8 @@ export function Results({result,onReplay,onReset}:{result:MatchResult;onReplay:(
   const bestChances = homeXg >= awayXg ? result.home : result.away
   const insight = homeXg + awayXg > 0 ? `${bestChances.name} generated ${Math.max(homeXg,awayXg).toFixed(2)} expected goals from ${bestChances.stats.shots} shots.` : 'Every duel, pass and finish shaped the final score.'
 
-  return <div className="results-page report-page"><Header step="result"/><main className="report-main">
-    <div className="report-topline"><span><i/>{abandoned?'Abandoned':'Full time'} · {result.regulationMinutes ?? 90} minutes{result.addedTime && ` + ${result.addedTime.firstHalf + result.addedTime.secondHalf} added`}</span><small>Match report / 5-a-side</small></div>
+  return <div className="results-page report-page"><Header step="result" onHome={onHome} onBuild={onBuild}/><main className="report-main">
+    <div className="report-topline"><span><i/>{abandoned?'Abandoned':'Full time'} · {result.regulationMinutes ?? 90} minutes{result.addedTime && ` + ${result.addedTime.firstHalf + result.addedTime.secondHalf} added`}</span><small>Match report</small></div>
     <section className="report-hero">
       <p className="eyebrow">{abandoned?'Match stopped':draw?'Honours even':'The final whistle'}</p>
       <h1>{abandoned?'The match was abandoned.':draw?'Nothing between them.':`${winner.name} takes it.`}</h1>
@@ -44,7 +44,7 @@ export function Results({result,onReplay,onReset}:{result:MatchResult;onReplay:(
         <div className="star-note">{star?.team && <span>{result.events.filter(event=>event.type==='goal'&&event.playerId===star.playerId&&event.team===star.team).length} goals</span>}<span>Top rated performance</span></div>
         <div className="star-rating"><strong>{star?.rating.toFixed(1) ?? '—'}</strong><div><b>Match rating</b><span>out of 10</span></div></div>
       </aside>
-      <section className="report-stats report-panel"><div className="report-panel-heading"><div><p className="eyebrow">The numbers</p><h2>How the match unfolded</h2></div><Target size={21}/></div>
+      <section className="report-stats report-panel"><div className="report-panel-heading"><div><h2>How the match unfolded</h2></div><Target size={21}/></div>
         <div className="report-stat-teams"><span><i/>{result.home.name}</span><span>{result.away.name}<i/></span></div>
         {rows.map(([label,key])=>{const h=result.home.stats[key]??0,a=result.away.stats[key]??0;return <div className="report-stat-row" key={key}>
           <div><b className={h>a?'stat-leading':''}>{formatStat(key,h)}</b><span>{label}</span><b className={a>h?'stat-leading':''}>{formatStat(key,a)}</b></div>
@@ -64,5 +64,5 @@ export function Results({result,onReplay,onReset}:{result:MatchResult;onReplay:(
 }
 
 function GoalRow({event,name,assist,clock}:{event:MatchEvent;name:string;assist?:string;clock:string}) {
-  return <article className={`report-goal ${event.team}`}><time>{clock}</time><span className="goal-ball"><CircleDot size={16}/></span><div><b>{name}</b><small>{assist ? `Assist by ${assist}` : 'Unassisted'}</small></div><span className="goal-score">{event.homeScore} <i>:</i> {event.awayScore}</span></article>
+  return <article className={`report-goal ${event.team}`}><time>{clock}</time><span className="goal-ball"><CircleDot size={16}/></span><div><b>{name}</b>{assist && <small>Assist by {assist}</small>}</div><span className="goal-score">{event.homeScore} <i>:</i> {event.awayScore}</span></article>
 }

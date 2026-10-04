@@ -1,11 +1,13 @@
-import type { MatchEvent as EngineMatchEvent, MatchEventType, OffsideDecision, ReplaySnapshot, RestartType, TeamProfile } from '@footballsimsim/shared'
+import type { MatchEvent as EngineMatchEvent, MatchEventType, OffsideDecision, PitchRole, ReplaySnapshot, RestartType, TeamProfile } from '@footballsimsim/shared'
 export type Player = {
   id: string
+  playerId: string
   name: string
   fullName?: string
   version: string
   rating: number
-  position: string
+  position: PitchRole
+  positions: PitchRole[]
   club: string
   nationality: string
   pace: number
@@ -14,7 +16,9 @@ export type Player = {
   dribbling: number
   defending: number
   physical: number
-  gk?: { diving: number; reflexes: number; handling: number; speed: number; kicking: number; positioning: number }
+  gk?: { diving?: number; reflexes?: number; handling?: number; speed?: number; kicking?: number; positioning?: number }
+  attributes?: { finishing?: number; positioning?: number; penalties?: number; ballControl?: number; vision?: number; composure?: number; reactions?: number; agility?: number; stamina?: number; strength?: number; interceptions?: number; standingTackle?: number; aggression?: number }
+  profile?: { age?: number; heightCm?: number; weightKg?: number; foot?: string; jersey?: number; bodyType?: string; weakFoot?: number; skillMoves?: number; reputation?: number; workRate?: string }
   image?: string
 }
 

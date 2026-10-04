@@ -1,0 +1,93 @@
+.match-pitch {
+  --pitch-ground: oklch(20% 0.025 155);
+  --pitch-ground-light: oklch(29% 0.038 145);
+  --pitch-grass-far: oklch(44% 0.085 147);
+  --pitch-grass-near: oklch(53% 0.092 145);
+  --pitch-line: oklch(91% 0.035 100);
+  --pitch-home: oklch(65% 0.21 26);
+  --pitch-away: oklch(94% 0.026 90);
+  --pitch-gold: oklch(83% 0.13 87);
+  --pitch-ink: oklch(18% 0.025 155);
+  margin: 0;
+  background: var(--pitch-ground);
+  position: relative;
+}
+.match-pitch-scene { display: block; width: 100%; height: auto; overflow: visible; }
+.pitch-ground-shadow { fill: oklch(13% 0.022 150 / 0.35); }
+.pitch-turf-edge { fill: oklch(32% 0.055 140); }
+.pitch-turf-side { fill: oklch(26% 0.046 145); }
+.pitch-mow-light { fill: oklch(80% 0.07 132 / 0.05); }
+.pitch-mow-dark { fill: oklch(22% 0.055 150 / 0.05); }
+.pitch-markings { fill: none; stroke: var(--pitch-line); stroke-width: 1.8; stroke-linejoin: round; opacity: 0.78; }
+.pitch-marking-dot { fill: var(--pitch-line); stroke: none; }
+.pitch-goal-floor { fill: oklch(14% 0.025 145 / 0.38); }
+.pitch-goal-roof { fill: oklch(90% 0.023 90 / 0.09); }
+.pitch-goal-netting { fill: oklch(88% 0.02 90 / 0.08); stroke: oklch(82% 0.028 95 / 0.4); stroke-width: 1; }
+.pitch-net-thread { fill: none; stroke: oklch(90% 0.02 90 / 0.35); stroke-width: 0.8; }
+.pitch-goal-frame { fill: var(--pitch-line); stroke: var(--pitch-line); stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; }
+.pitch-goal-frame path { fill: none; }
+.pitch-goal-structure.is-scoring .pitch-goal-netting { fill: oklch(83% 0.13 87 / 0.3); stroke: var(--pitch-gold); }
+.pitch-person { --kit: var(--pitch-home); --kit-detail: oklch(96% 0.025 85); --shorts: oklch(30% 0.08 25); outline: none; }
+.pitch-person.away { --kit: var(--pitch-away); --kit-detail: oklch(40% 0.075 255); --shorts: oklch(33% 0.06 250); }
+.pitch-person.home.keeper { --kit: oklch(81% 0.15 85); --shorts: oklch(35% 0.07 85); --kit-detail: oklch(27% 0.05 85); }
+.pitch-person.away.keeper { --kit: oklch(73% 0.12 190); --shorts: oklch(29% 0.05 190); --kit-detail: oklch(22% 0.04 190); }
+.pitch-person-shadow { fill: oklch(13% 0.03 150 / 0.38); }
+.pitch-person:focus-visible .pitch-shirt { stroke: var(--pitch-gold); stroke-width: 2.5; }
+.pitch-limb, .pitch-arm { fill: none; stroke: oklch(80% 0.07 60); stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round; }
+.pitch-boot { fill: none; stroke: var(--pitch-ink); stroke-width: 4; stroke-linecap: round; }
+.pitch-keeper-pose { transform-origin: 0 -17px; transform: translate(var(--dive-x), var(--dive-y)) rotate(var(--dive-angle)) scale(1, var(--dive-body-scale)); }
+.pitch-person-shadow.is-saving { transform: translate(var(--dive-shadow-x), var(--dive-shadow-y)); }
+.pitch-keeper-glove { fill: var(--pitch-away); stroke: var(--pitch-ink); stroke-width: 0.8; }
+.pitch-shirt { fill: var(--kit); stroke: oklch(19% 0.027 155 / 0.65); stroke-width: 1; }
+.pitch-shirt-detail { fill: none; stroke: var(--kit-detail); stroke-width: 1.6; opacity: 0.85; }
+.pitch-shorts { fill: var(--shorts); }
+.pitch-head { fill: oklch(80% 0.07 60); stroke: oklch(24% 0.035 60 / 0.6); stroke-width: 0.8; }
+.pitch-hair { fill: oklch(26% 0.035 60); }
+.pitch-yellow-card { fill: var(--pitch-gold); stroke: var(--pitch-ink); stroke-width: 0.7; }
+.pitch-name-label { pointer-events: none; }
+.pitch-name-label rect { fill: oklch(17% 0.025 155 / 0.86); }
+.pitch-name-label text { fill: var(--pitch-away); font-size: 14px; font-weight: 600; }
+.pitch-person.has-ball .pitch-name-label rect { fill: oklch(25% 0.047 85); stroke: var(--pitch-gold); stroke-width: 1; }
+.pitch-person.has-ball .pitch-name-label text { fill: var(--pitch-gold); }
+.pitch-energy-base, .pitch-energy-fill { stroke-width: 2; stroke-linecap: round; }
+.pitch-energy-base { stroke: oklch(18% 0.03 145 / 0.55); }
+.pitch-energy-fill { stroke: oklch(83% 0.1 140); }
+.pitch-ball-shadow { fill: var(--pitch-ink); }
+.pitch-ball-outline { fill: none; stroke: var(--pitch-ink); stroke-width: 0.7; }
+.pitch-ball-surface { fill: oklch(98% 0.015 90); }
+.pitch-ball-panels { fill: var(--pitch-ink); }
+.pitch-ball-shine { fill: oklch(100% 0 0 / 0.5); }
+.pitch-offside, .pitch-offside-label { color: oklch(85% 0.12 145); }
+.pitch-offside.flagged, .pitch-offside-label.flagged { color: var(--pitch-gold); }
+.pitch-offside { fill: none; stroke: currentColor; stroke-width: 2.5; stroke-dasharray: 7 5; }
+.pitch-offside-label rect { fill: var(--pitch-ink); stroke: currentColor; }
+.pitch-offside-label text { fill: currentColor; font-size: 16px; font-weight: 700; }
+.pitch-score-callout text { fill: var(--pitch-gold); font-size: 24px; font-weight: 800; }
+.match-pitch-legend { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 0 24px 18px; font-size: 11px; color: oklch(79% 0.035 145); }
+.match-pitch-legend > span { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.match-pitch-legend .home, .match-pitch-legend .away { max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.match-pitch-legend i { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--pitch-home); }
+.match-pitch-legend .away i { background: var(--pitch-away); }
+.match-pitch-legend svg { width: 13px; height: 13px; flex-shrink: 0; }
+.match-pitch-legend .pitch-view-label { font-size: 10px; }
+.match-pitch ::selection { background: var(--pitch-gold); color: var(--pitch-ink); }
+@media (max-width: 780px) {
+  .match-pitch-legend { padding: 0 16px 14px; }
+}
+@media (max-width: 500px) {
+  .match-pitch-scene { margin-top: 12px; margin-bottom: 10px; }
+  .pitch-figure-body { transform: scale(1.25); }
+  .pitch-keeper-pose { transform: translate(var(--dive-mobile-x), var(--dive-mobile-y)) rotate(var(--dive-angle)) scale(1, var(--dive-body-scale)); }
+  .pitch-person-shadow.is-saving { transform: translate(var(--dive-mobile-shadow-x), var(--dive-mobile-shadow-y)); }
+  .pitch-name-label text { font-size: 22px; paint-order: stroke; stroke: var(--pitch-ink); stroke-width: 4px; }
+  .pitch-name-label rect, .pitch-energy-base, .pitch-energy-fill { display: none; }
+  .pitch-offside-label text { font-size: 22px; }
+  .pitch-score-callout text { font-size: 30px; }
+  .pitch-view-label { display: none !important; }
+  .match-pitch-legend { font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pitch-movement-pose { transform: none; }
+  .pitch-keeper-pose { transform: none; }
+  .pitch-person-shadow.is-saving { transform: none; }
+}

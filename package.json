@@ -2,12 +2,14 @@
   "name": "footballsimsim",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
     "build": "npm run build --workspace @footballsimsim/shared && npm run build --workspace @footballsimsim/simulation && npm run build --workspace @footballsimsim/api && npm run build --workspace @footballsimsim/web",
+    "data:prepare": "npm run build --workspace @footballsimsim/shared && npm run data:prepare --workspace @footballsimsim/api --",
     "dev": "npm run dev --workspace @footballsimsim/web",
     "dev:api": "npm run dev --workspace @footballsimsim/api",
     "test": "npm run build --workspace @footballsimsim/shared && npm run build --workspace @footballsimsim/simulation && npm run test --workspaces --if-present",

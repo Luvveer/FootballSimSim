@@ -1,0 +1,56 @@
+html:has(.landing){background:#100f10;color-scheme:dark;scroll-behavior:smooth}
+body:has(.landing){background:radial-gradient(ellipse at 50% 0,#332a1844,transparent 55%),#100f10}
+.landing{--lp-gold:#e7cb88;--lp-gold-soft:#eed28a;--lp-red:#ef4444;--lp-line:#3a3329;--lp-panel:#1b1916;--lp-muted:#a79b8a;color:#eee9e2;min-height:100vh;overflow-x:clip}
+.landing a{color:inherit;text-decoration:none}
+.lp-topbar{position:sticky;top:0;z-index:20;height:72px;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0 clamp(1rem,4vw,4.5rem);background:#111d;backdrop-filter:blur(12px);border-bottom:1px solid #2a2520}
+.lp-brand{display:flex;align-items:center;gap:10px;font-family:'Bebas Neue';font-size:25px;letter-spacing:.7px;color:#fff}
+.lp-brand>span:last-child{line-height:1;transform:translateY(.07em)}
+.lp-brand span span,.lp-footer span span{color:var(--lp-red)}
+.lp-eyebrow .sim-white{color:#fff}
+.lp-brand-mark{display:grid;place-items:center;width:38px;height:38px;border:1px solid #633;border-radius:9px;color:var(--lp-red)}
+.lp-topbar nav{display:flex;gap:clamp(1rem,2.5vw,2.25rem);font-size:.8rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--lp-muted)}
+.lp-topbar nav a:hover{color:#fff}
+.lp-button{display:inline-flex;align-items:center;justify-content:center;gap:.55rem;min-height:3rem;padding:0 1.6rem;border:1px solid var(--lp-red);border-radius:10px;background:#dc2626;color:#fff;font:inherit;font-size:1rem;font-weight:700;cursor:pointer;box-shadow:0 8px 26px #dc262640;transition:background .2s,box-shadow .2s,transform .2s}
+.lp-button:hover{background:#b91c1c;box-shadow:0 10px 32px #dc262666;transform:translateY(-1px)}
+.lp-button.small{min-height:2.35rem;padding:0 1.1rem;font-size:.85rem;border-radius:8px;box-shadow:none}
+.lp-button.ghost{background:transparent;border-color:#4a4033;color:#cfc3b1;box-shadow:none}
+.lp-button.ghost:hover{background:#211e19;color:#fff;transform:none}
+.lp-eyebrow{margin:0 0 .6rem;text-transform:uppercase;letter-spacing:.18em;color:var(--lp-red);font-size:.78rem;font-weight:700}
+
+.lp-hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);align-items:center;gap:clamp(1.5rem,4vw,4rem);max-width:78rem;margin:auto;padding:clamp(.75rem,2vw,1.5rem) clamp(1rem,4vw,4.5rem) clamp(1rem,2.5vw,2rem)}
+.lp-hero h1{margin:0;font-family:'Bebas Neue';font-weight:400;font-size:clamp(3rem,7.4vw,6.4rem);line-height:.92;letter-spacing:.01em;color:#fffaf1}
+.lp-hero h1 em{font-style:normal;color:var(--lp-red)}
+.lp-hero h1 span{color:var(--lp-gold-soft)}
+.lp-lede{max-width:34rem;margin:1rem 0 0;font-size:clamp(1rem,1.5vw,1.2rem);line-height:1.5;color:#c9bda9}
+.lp-actions{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:1.4rem}
+
+.lp-stage{min-width:0}
+.lp-live{overflow:hidden;border:1px solid var(--lp-line);border-radius:16px;background:#101612;box-shadow:0 30px 70px #0009}
+.lp-live .match-pitch-legend,.lp-live .pitch-name-label{display:none}
+.lp-live .match-pitch{border-radius:16px}
+
+.lp-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:1px;max-width:78rem;margin:clamp(1rem,2.5vw,2rem) auto;border:1px solid var(--lp-line);border-radius:14px;background:var(--lp-line);overflow:hidden;width:calc(100% - 2*clamp(1rem,4vw,4.5rem))}
+.lp-facts div{display:flex;flex-direction:column;align-items:center;gap:.25rem;padding:1.2rem .75rem;background:var(--lp-panel);text-align:center}
+.lp-facts strong{font-family:'Bebas Neue';font-weight:400;font-size:clamp(1.8rem,3.4vw,2.6rem);line-height:1;color:var(--lp-gold-soft);letter-spacing:.02em}
+.lp-facts span{font-size:.75rem;letter-spacing:.14em;text-transform:uppercase;color:var(--lp-muted)}
+
+.lp-section{max-width:60rem;margin:0 auto;padding:clamp(1.75rem,4.5vw,3.5rem) clamp(1rem,4vw,4.5rem) 0;scroll-margin-top:5rem}
+.lp-section h2,.lp-cta h2{margin:0;font-family:'Bebas Neue';font-weight:400;font-size:clamp(2.2rem,5vw,3.8rem);line-height:1;letter-spacing:.02em;color:#fffaf1}
+.lp-copy{margin:.75rem 0 0;max-width:46rem;font-size:clamp(1rem,1.5vw,1.15rem);line-height:1.65;color:#c9bda9}
+.lp-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:1rem;margin:1.5rem 0 0;padding:0;list-style:none}
+.lp-steps li{position:relative;padding:1.4rem;border:1px solid var(--lp-line);border-radius:14px;background:var(--lp-panel)}
+.lp-step-icon{display:grid;place-items:center;width:2.6rem;height:2.6rem;border-radius:10px;background:#c459481c;color:#ef9a85}
+.lp-steps small{position:absolute;top:1.1rem;right:1.2rem;font-family:'Bebas Neue';font-size:1.6rem;color:#4a4033}
+.lp-steps h3{margin:1rem 0 .4rem;font-size:1.15rem}
+.lp-steps p{margin:0;font-size:.95rem;line-height:1.55;color:var(--lp-muted)}
+.lp-chips{display:flex;gap:.6rem;margin-top:1rem}
+.lp-chips span{padding:.45rem 1.1rem;border:1px solid #4a4033;border-radius:999px;background:var(--lp-panel);color:var(--lp-gold);font-family:'Bebas Neue';font-size:1.3rem;letter-spacing:.08em}
+
+.lp-cta{max-width:60rem;margin:clamp(2rem,5vw,3.5rem) auto 0;padding:clamp(1.5rem,4vw,2.5rem) clamp(1rem,4vw,2rem);width:calc(100% - 2*clamp(1rem,4vw,4.5rem));text-align:center;border:1px solid #4a4033;border-radius:20px;background:radial-gradient(ellipse at 50% 0,#b78e2824,transparent 70%),var(--lp-panel)}
+.lp-cta p{margin:.75rem 0 1.5rem;color:var(--lp-muted)}
+.lp-footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem 1rem;max-width:78rem;margin:clamp(2rem,4.5vw,3rem) auto 0;padding:1.25rem clamp(1rem,4vw,4.5rem);border-top:1px solid #2a2520;font-family:'Bebas Neue';font-size:1.5rem;letter-spacing:.5px}
+.lp-footer small{font-family:'Source Sans 3',sans-serif;font-size:1.5rem;font-weight:700;line-height:1;letter-spacing:0;text-transform:none;color:#0278ff}
+
+@media(max-width:60rem){.lp-hero{grid-template-columns:1fr}.lp-topbar nav{display:none}}
+@media(max-width:30rem){.lp-topbar{height:62px}.lp-brand{font-size:21px}.lp-brand-mark{width:32px;height:32px}.lp-actions .lp-button{flex:1}}
+@media(prefers-reduced-motion:reduce){html:has(.landing){scroll-behavior:auto}}

@@ -40,11 +40,7 @@ function skill(slot: LineupSlot, kind: "passing" | "dribbling" | "defending" | "
     shooting: [a("shooting"), a("finishing", "shooting"), a("composure", "shooting")],
     keeping: [a("goalkeeperDiving", "reactions"), a("goalkeeperHandling", "reactions"), a("goalkeeperPositioning", "reactions"), a("goalkeeperReflexes", "reactions")],
   };
-  const position = slot.player.positions;
-  const compatible = slot.role === "GK" ? position.includes("GK") : slot.role === "FWD"
-    ? position.some(p => ["ST", "CF", "LW", "RW", "FWD"].includes(p)) : slot.role === "DEF"
-    ? position.some(p => ["CB", "LB", "RB", "LWB", "RWB", "CDM", "DEF"].includes(p))
-    : position.some(p => ["LM", "RM", "CM", "CAM", "CDM", "LW", "RW", "MID"].includes(p));
+  const compatible = slot.player.positions.includes(slot.role);
   return average(values[kind]) * (compatible ? 1 : 0.9);
 }
 function profile(team: Team): TeamProfile {
@@ -96,6 +92,9 @@ export function simulateMatch(config: MatchConfig): MatchResult {
   let period: 1 | 2 = 1;
   let halfTimeMinute = regulation / 2;
   let periodEnd = regulation / 2;
+  // A period can only end once the ball is out of both end quarters of the pitch, but play stops after 5 minutes (5 seconds on screen) regardless.
+  const MAX_WHISTLE_DELAY = 5;
+  let whistleOverrun = 0;
   let addedAnnounced = false;
   let lostSeconds = 0;
   let abandoned = false;
@@ -199,7 +198,7 @@ export function simulateMatch(config: MatchConfig): MatchResult {
     explanation: string, secondary?: LineupSlot, probability?: number, expectedGoals?: number): MatchEvent => {
     const state = snapshot(type === "GOAL" ? "GOAL" : type === "SHOT" || type === "SAVE" ? "SHOT" : type === "HALF_TIME" ? "HALF_TIME" : type === "FULL_TIME" || type === "MATCH_ABANDONED" ? "FULL_TIME" : undefined);
     if (type === "SHOT" || type === "GOAL") state.ball = { x: worldX(98, eventSide), y: successful ? 50 : 25 };
-    if (type === "SAVE") { state.ball = { x: worldX(7, eventSide), y: 50 }; state.possession = eventSide; }
+    if (type === "SAVE") state.ball = { x: worldX(7, eventSide), y: 50 };
     if (type === "HALF_TIME") state.status = "HALF_TIME";
     if (type === "FULL_TIME") state.status = "FULL_TIME";
     if (type === "MATCH_ABANDONED") state.status = "ABANDONED";
@@ -259,8 +258,12 @@ export function simulateMatch(config: MatchConfig): MatchResult {
     teamStats[side].expectedGoals = Math.round((teamStats[side].expectedGoals + xg) * 1000) / 1000;
     if (onTarget) { actorStats.shotsOnTarget++; teamStats[side].shotsOnTarget++; }
     const location = kind === "PENALTY" ? "from the penalty spot" : kind === "FREE_KICK" ? "from the free kick" : progress > 0.78 ? "inside the area" : "from distance";
-    emit("SHOT", side, actor, onTarget, `${name(actor)} shoots ${location}${blocked ? " — blocked." : onTarget ? "." : " — wide of the goal."}`,
+    const shot = emit("SHOT", side, actor, onTarget, `${name(actor)} shoots ${location}${blocked ? " — blocked." : onTarget ? "." : " — wide of the goal."}`,
       `Finishing ${Math.round(shooting)} vs keeper ${Math.round(keeping)} · distance ${Math.round(goalDistance)} pitch units · ${Math.round(xg * 100)}% goal chance.`, undefined, targetProbability, xg);
+    // Presentation placement has its own deterministic stream. Never consume
+    // the match RNG here: doing so would change every later outcome for a seed.
+    if (onTarget) shot.snapshot.ball.y = 42 + seededRandom(`${config.seed}:shot-placement:${shot.id}`)() * 16;
+    shot.ballMotion = { kind: "SHOT", from: { ...ball }, to: { ...shot.snapshot.ball } };
     if (blocked) {
       const blocker = weightedSelect(field(defendingSide), slot => Math.max(5, effective(slot, "defending")), random);
       emit("BLOCK", defendingSide, blocker, true, `${name(blocker)} blocks the shot.`, "The defender gets between the shot and the goal.", actor);
@@ -271,13 +274,14 @@ export function simulateMatch(config: MatchConfig): MatchResult {
       if (side === "HOME") score.home++; else score.away++;
       const assister = kind === "OPEN_PLAY" && lastPasser && lastPasser.player.id !== actor.player.id ? lastPasser : undefined;
       if (assister) playerStatsFor(side, assister).assists++;
-      emit("GOAL", side, actor, true, `${name(actor)} scores ${location}!`, assister ? `Created by ${name(assister)}; the finish beats the goalkeeper.` : "The ball crosses the goal line between the posts.", assister, goalGivenTarget, xg);
+      const goal = emit("GOAL", side, actor, true, `${name(actor)} scores ${location}!`, assister ? `Created by ${name(assister)}; the finish beats the goalkeeper.` : "The ball crosses the goal line between the posts.", assister, goalGivenTarget, xg);
+      goal.snapshot.ball.y = shot.snapshot.ball.y;
       queueRestart("KICKOFF", defendingSide, { x: 50, y: 50 });
     } else if (onTarget) {
       playerStatsFor(defendingSide, goalie).saves++; teamStats[defendingSide].saves++;
+      turnover(defendingSide, goalie); mustPass = true;
       emit("SAVE", defendingSide, goalie, true, `${name(goalie)} keeps it out.`, `Goalkeeping ${Math.round(keeping)} contests finishing ${Math.round(shooting)}.`, actor, 1 - goalGivenTarget);
       if (random() < 0.2) ballOut("GOAL_LINE", "DEFENCE", attackingSide, goalie);
-      else { turnover(defendingSide, goalie); mustPass = true; }
     } else ballOut("GOAL_LINE", "ATTACK", attackingSide, actor);
   };
   const pass = () => {
@@ -374,6 +378,14 @@ export function simulateMatch(config: MatchConfig): MatchResult {
       }
       // Extend either half to complete a penalty awarded before its whistle.
       if (pending?.type === "PENALTY") takeRestart();
+      const ballX = ballPosition().x;
+      if ((ballX < 25 || ballX > 75) && whistleOverrun < MAX_WHISTLE_DELAY) {
+        // Extend by about one action step, otherwise the loop only advances the clock and the ball never moves.
+        const extension = Math.min(1.75, MAX_WHISTLE_DELAY - whistleOverrun);
+        periodEnd += extension; whistleOverrun += extension;
+        continue;
+      }
+      whistleOverrun = 0;
       if (period === 1) {
         halfTimeMinute = minute;
         emit("HALF_TIME", side, carrier, true, "Half time. The teams change ends.", "The team that did not take the opening kickoff starts the second half.");

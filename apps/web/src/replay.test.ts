@@ -14,12 +14,23 @@ const player = (key:string,x:number):ReplayPlayer=>({key,x,y:48,playerId:key,nam
 describe('match playback timing',()=>{
   it('plays one minute per second, freezing the clock for a five-second interval',()=>{
     expect(matchTimeline(result,0)).toMatchObject({minute:0,progress:0,half:0.5})
-    expect(matchTimeline(result,30)).toMatchObject({minute:30,progress:30/96,inHalfTime:false})
+    expect(matchTimeline(result,30)).toMatchObject({minute:30,progress:0.5*(30/45),inHalfTime:false})
     expect(matchTimeline(result,48)).toMatchObject({minute:48,progress:0.5,inHalfTime:true,breakRemaining:5,period:1})
     expect(matchTimeline(result,52)).toMatchObject({minute:48,progress:0.5,inHalfTime:true,breakRemaining:1})
     expect(matchTimeline(result,53)).toMatchObject({minute:48,inHalfTime:false,period:2})
     expect(matchTimeline(result,101)).toMatchObject({minute:96,progress:1,complete:true})
     expect(replayTiming(result).totalSeconds).toBe(101)
+  })
+  it('keeps the half-time marker in the middle and holds the bar during added time',()=>{
+    // First half runs to 48 (3 minutes added), the match to 96.
+    expect(matchTimeline(result,0).half).toBe(0.5)
+    expect(matchTimeline(result,45).progress).toBe(0.5)
+    expect(matchTimeline(result,46.5)).toMatchObject({minute:46.5,progress:0.5,half:0.5})
+    expect(matchTimeline(result,48)).toMatchObject({progress:0.5,inHalfTime:true})
+    expect(matchTimeline(result,53)).toMatchObject({minute:48,progress:0.5,period:2})
+    expect(matchTimeline(result,53+22.5).progress).toBe(0.75)
+    expect(matchTimeline(result,53+45).progress).toBe(1)
+    expect(matchTimeline(result,53+47)).toMatchObject({progress:1,minute:95})
   })
   it('takes exactly 45 seconds per half and keeps the break at five real seconds at any speed',()=>{
     const regulation={durationMinutes:90,regulationMinutes:90,halfTimeMinute:45} as MatchResult
@@ -79,6 +90,8 @@ describe('match playback timing',()=>{
     const holding=replayFrame([start,end],start.snapshot,2)
     expect(holding.snapshot!.ball.x).toBe(holding.snapshot!.players[0]!.x)
     expect(holding.path).toBeUndefined()
+    expect(holding.rotation).toBeGreaterThan(0)
+    expect(replayFrame([start,end],start.snapshot,2.1).rotation).toBeGreaterThan(holding.rotation)
     const beforeKick=replayFrame([start,end],start.snapshot,3.35-0.0001)
     const afterKick=replayFrame([start,end],start.snapshot,3.35+0.0001)
     expect(Math.abs(afterKick.snapshot!.ball.x-beforeKick.snapshot!.ball.x)).toBeLessThan(0.05)
@@ -88,6 +101,12 @@ describe('match playback timing',()=>{
     expect(arrival.visibleCount).toBe(1)
     expect(arrival.snapshot!.ball.x).toBeCloseTo(70,1)
     expect(replayFrame([start,end],start.snapshot,4).snapshot!.carrierKey).toBe('receiver')
+    expect(arrival.rotation).toBeCloseTo(replayFrame([start,end],start.snapshot,4).rotation, 0)
+  })
+  it('does not rotate a stationary ball while waiting for a pass',()=>{
+    const events=[event(0,10),event(4,70)]
+    expect(replayFrame(events,snapshot(10),2).rotation).toBe(0)
+    expect(replayFrame(events,snapshot(10),3).rotation).toBe(0)
   })
   it('uses brisk passing motion for an interception without revealing the turnover early',()=>{
     const start=event(0,10),pass=event(4,90),interception=event(4,70,'interception')
@@ -130,6 +149,49 @@ describe('match playback timing',()=>{
     expect(flight.snapshot!.ball.x).toBeGreaterThan(30)
     expect(flight.snapshot!.ball.x).toBeLessThan(50)
     expect(flight.loft).toBeGreaterThan(0)
+    // Height is presentation data, not a sideways bend on the pitch.
+    expect(flight.snapshot!.ball.y).toBeCloseTo((flight.snapshot!.ball.x-30)/20*50)
     expect(replayFrame([setup,ready,receive],setup.snapshot,3.2).snapshot!.ball).toEqual({x:50,y:50})
+  })
+  it('uses replay position to drive deterministic movement poses and holds them at breaks', () => {
+    const start = event(0, 10), end = event(4, 70)
+    start.snapshot!.players = [player('runner', 10)]
+    end.snapshot!.players = [player('runner', 45)]
+    const frame = replayFrame([start, end], start.snapshot, 2)
+    expect(frame.playerMotion.runner.activity).toBeGreaterThan(0)
+    expect(frame.playerMotion.runner.facing).toBe(1)
+    expect(replayFrame([start, end], start.snapshot, 2).playerMotion).toEqual(frame.playerMotion)
+    start.snapshot!.status = 'HALF_TIME'
+    expect(replayFrame([start, end], start.snapshot, 2).playerMotion).toEqual({})
+  })
+  it.each([[0, 20], [0, -20], [20, 20], [-20, -20]])('projects movement direction for delta (%s, %s)', (dx, dy) => {
+    const start = event(0, 10), end = event(4, 70)
+    start.snapshot!.players = [player('runner', 50)]
+    end.snapshot!.players = [{ ...player('runner', 50 + dx), y: 48 + dy }]
+    const { direction } = replayFrame([start, end], start.snapshot, 2).playerMotion.runner
+    expect(Math.hypot(direction.x, direction.y)).toBeCloseTo(1)
+    expect(Math.sign(direction.y)).toBe(Math.sign(dy))
+    if (dx) expect(Math.sign(direction.x)).toBe(Math.sign(dx))
+  })
+  it('keeps gait phase continuous across events and lineup ordering changes', () => {
+    const start = event(0, 10), middle = event(4, 40), end = event(8, 70)
+    start.snapshot!.players = [player('runner', 10), player('other', 20)]
+    middle.snapshot!.players = [player('other', 20), player('runner', 40)]
+    end.snapshot!.players = [player('runner', 70), player('other', 20)]
+    const before = replayFrame([start, middle, end], start.snapshot, 4 - 0.00001).playerMotion.runner
+    const after = replayFrame([start, middle, end], start.snapshot, 4).playerMotion.runner
+    expect(before.phase).toBeCloseTo(after.phase, 6)
+    expect(after.activity).toBe(0)
+    expect(replayFrame([start, middle, end], start.snapshot, 2).playerMotion.other.activity).toBe(0)
+  })
+  it('scales cadence and stride activity with travel speed', () => {
+    const start = event(0, 10), slow = event(4, 20), fast = event(4, 70)
+    start.snapshot!.players = [player('runner', 10)]
+    slow.snapshot!.players = [player('runner', 20)]
+    fast.snapshot!.players = [player('runner', 70)]
+    const slowPose = replayFrame([start, slow], start.snapshot, 2).playerMotion.runner
+    const fastPose = replayFrame([start, fast], start.snapshot, 2).playerMotion.runner
+    expect(fastPose.activity).toBeGreaterThan(slowPose.activity)
+    expect(fastPose.phase).toBeGreaterThan(slowPose.phase)
   })
 })

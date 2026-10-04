@@ -43,6 +43,14 @@ describe("API routes", () => {
     expect(response.json()).toMatchObject({ total: 2, players: [{ player_id: "1" }, { player_id: "1" }] });
   });
 
+  it("filters players through canonical roles", async () => {
+    const response = await app.inject({ method: "GET", url: "/players?position=FWD" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ total: 2, players: [{ player_id: "4" }, { player_id: "5" }] });
+    expect(response.json().players.every((player: { player_roles?: string }) => player.player_roles === "FWD")).toBe(true);
+    expect(response.json().players.every((player: { player_positions?: string }) => player.player_positions === undefined)).toBe(true);
+  });
+
   it("paginates players without changing the total", async () => {
     const response = await app.inject({ method: "GET", url: "/players?limit=2&offset=2" });
     expect(response.statusCode).toBe(200);
@@ -61,7 +69,9 @@ describe("API routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ seed: "route-test", regulationMinutes: 90, ruleset: "CUSTOM_FIVE_A_SIDE_FOOTBALL" });
     const result = response.json();
-    expect(result.durationMinutes).toBe(90 + result.addedTime.firstHalf + result.addedTime.secondHalf);
+    // The whistle waits for the ball to leave the end quarters, so play can run past the announced added time.
+    const announced = 90 + result.addedTime.firstHalf + result.addedTime.secondHalf;
+    expect(result.durationMinutes).toBeGreaterThanOrEqual(announced);
     expect(result.events.length).toBeGreaterThan(0);
     expect(result.initialSnapshot.players).toHaveLength(10);
     expect(result.initialSnapshot.teamStats.HOME.shots).toBe(0);

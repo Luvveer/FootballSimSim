@@ -35,6 +35,37 @@ const config = (seed: string): MatchConfig => ({
 });
 
 describe("football match lifecycle", () => {
+  it("records shot release geometry without replacing the resolved snapshot", () => {
+    const result = simulateMatch(config("shot-animation"));
+    const shots = result.events.filter(event => event.type === "SHOT");
+    expect(shots.length).toBeGreaterThan(0);
+    for (const shot of shots) {
+      expect(shot.ballMotion?.kind).toBe("SHOT");
+      expect(shot.ballMotion?.to).toEqual(shot.snapshot.ball);
+      expect(shot.ballMotion?.to).not.toBe(shot.snapshot.ball);
+      expect(shot.ballMotion?.from.x).toBeGreaterThanOrEqual(0);
+      expect(shot.ballMotion?.from.x).toBeLessThanOrEqual(100);
+      expect(shot.ballMotion?.from.y).toBeGreaterThanOrEqual(0);
+      expect(shot.ballMotion?.from.y).toBeLessThanOrEqual(100);
+    }
+  });
+  it("places on-target shots inside the posts and carries the target through goals", () => {
+    const targets: number[] = [];
+    for (let seed = 0; seed < 10; seed++) {
+      const result = simulateMatch(config(`shot-placement-${seed}`));
+      result.events.forEach((event, index) => {
+        if (event.type !== "SHOT" || !event.successful) return;
+        const target = event.ballMotion!.to;
+        expect(target.y).toBeGreaterThanOrEqual(42);
+        expect(target.y).toBeLessThanOrEqual(58);
+        targets.push(target.y);
+        if (result.events[index + 1]?.type === "GOAL") expect(result.events[index + 1]!.snapshot.ball.y).toBe(target.y);
+      });
+    }
+    expect(targets.some(y => y < 48)).toBe(true);
+    expect(targets.some(y => y > 52)).toBe(true);
+    expect(targets.some(y => Math.abs(y - 50) < 1)).toBe(true);
+  });
   it("plays two halves with opposite kickoff teams, switched ends and added time", () => {
     const result = simulateMatch(config("rules-halves"));
     const half = result.events.find(e=>e.type==="HALF_TIME")!;
@@ -50,7 +81,10 @@ describe("football match lifecycle", () => {
     expect(second.snapshot.direction.HOME).toBe(-1);
     expect(second.snapshot.period).toBe(2);
     expect(result.events.at(-1)!.type).toBe("FULL_TIME");
-    expect(result.durationMinutes).toBe(60+result.addedTime.firstHalf+result.addedTime.secondHalf);
+    // The whistle waits for the ball to leave the end quarters, so play can run a little past the announced added time.
+    const announced = 60 + result.addedTime.firstHalf + result.addedTime.secondHalf;
+    expect(result.durationMinutes).toBeGreaterThanOrEqual(announced);
+    expect(result.durationMinutes).toBeLessThanOrEqual(announced + 10);
   });
 
   it("awards defending indirect free kicks for offside and tracks discipline without retaining sent-off players", () => {
@@ -112,7 +146,10 @@ describe("simulateMatch", () => {
     expect(result.finalState.score.away).toBe(result.teamStats.AWAY.goals);
     expect(result.manOfTheMatch.rating).toBeGreaterThanOrEqual(5);
     expect(result.regulationMinutes).toBe(60);
-    expect(result.durationMinutes).toBe(60 + result.addedTime.firstHalf + result.addedTime.secondHalf);
+    // The whistle waits for the ball to leave the end quarters, so play can run a little past the announced added time.
+    const announced = 60 + result.addedTime.firstHalf + result.addedTime.secondHalf;
+    expect(result.durationMinutes).toBeGreaterThanOrEqual(announced);
+    expect(result.durationMinutes).toBeLessThanOrEqual(announced + 10);
     expect(result.events.every((event) => event.minute <= result.durationMinutes)).toBe(true);
   });
 
@@ -206,6 +243,23 @@ describe("attribute-driven match model", () => {
     expect(weakConceded).toBeGreaterThan(strongConceded * 1.5);
   });
 
+  it("uses broad-attribute fallbacks when optional composure is missing", () => {
+    const explicit = config("missing-composure-fallback");
+    for (const side of [explicit.homeTeam, explicit.awayTeam]) {
+      for (const slot of side.lineup) {
+        slot.player.attributes.shooting = 80;
+        slot.player.attributes.positioning = 80;
+        slot.player.attributes.composure = 80;
+      }
+    }
+    const missing = structuredClone(explicit);
+    for (const side of [missing.homeTeam, missing.awayTeam]) {
+      for (const slot of side.lineup) delete slot.player.attributes.composure;
+    }
+
+    expect(simulateMatch(missing)).toEqual(simulateMatch(explicit));
+  });
+
   it("retains the receiving player as the next ball carrier and prevents shots during early buildup", () => {
     const result = simulateMatch(config("carrier-continuity"));
     for (const [index, event] of result.events.entries()) {
@@ -233,6 +287,7 @@ describe("attribute-driven match model", () => {
       expect(event.snapshot.teamStats.HOME.possession + event.snapshot.teamStats.AWAY.possession).toBe(100);
       expect(event.snapshot.teamStats.HOME.goals).toBe(event.score.home);
       expect(event.snapshot.teamStats.AWAY.goals).toBe(event.score.away);
+      if (event.snapshot.carrierKey) expect(event.snapshot.carrierKey).toMatch(new RegExp(`^${event.snapshot.possession}:`));
       for (const point of [event.snapshot.ball, ...event.snapshot.players]) {
         expect(point.x).toBeGreaterThanOrEqual(0); expect(point.x).toBeLessThanOrEqual(100);
         expect(point.y).toBeGreaterThanOrEqual(0); expect(point.y).toBeLessThanOrEqual(100);
@@ -244,6 +299,9 @@ describe("attribute-driven match model", () => {
       expect(shots.length).toBe(result.teamStats[side].shots);
       expect(result.events.at(-1)!.snapshot.teamStats[side].shots).toBe(result.teamStats[side].shots);
     }
+    const saves = result.events.filter(event => event.type === "SAVE");
+    expect(saves.length).toBeGreaterThan(0);
+    for (const save of saves) expect(save.snapshot.carrierKey).toBe(`${save.team}:${save.playerId}`);
   });
 });
 
@@ -268,4 +326,20 @@ it("uses forward roles and stamina instead of selecting all actors uniformly", (
   const home = players.find(p => p.key === `HOME:${fit.homeTeam.lineup[3]!.player.id}`)!;
   const away = players.find(p => p.key === `AWAY:${fit.awayTeam.lineup[3]!.player.id}`)!;
   expect(home.energy).toBeGreaterThan(away.energy);
+});
+
+it("waits for the ball to leave the end quarters before the whistle, for at most 5 minutes", () => {
+  for (let n = 0; n < 40; n++) {
+    const result = simulateMatch(config(`whistle-${n}`));
+    for (const event of result.events.filter(e => e.type === "HALF_TIME" || e.type === "FULL_TIME")) {
+      const planned = event.type === "HALF_TIME" ? 30 + result.addedTime.firstHalf : result.halfTimeMinute + 30 + result.addedTime.secondHalf;
+      const delay = event.minute - planned;
+      expect(delay).toBeLessThanOrEqual(5.01);
+      // Inside the 5 minute allowance the whistle only blows with the ball in the middle half.
+      if (delay < 4.99) {
+        expect(event.snapshot.ball.x).toBeGreaterThanOrEqual(25);
+        expect(event.snapshot.ball.x).toBeLessThanOrEqual(75);
+      }
+    }
+  }
 });

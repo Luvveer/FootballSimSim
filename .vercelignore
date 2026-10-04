@@ -1,0 +1,15 @@
+.git
+.agents
+.codex
+.aws
+node_modules
+**/node_modules
+**/dist
+coverage
+.vite
+*.tsbuildinfo
+.DS_Store
+design-system
+.impeccable
+male_players.csv
+test.csv

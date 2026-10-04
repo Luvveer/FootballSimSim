@@ -11,7 +11,36 @@ export type MatchEventType =
   | "FREE_KICK" | "PENALTY" | "THROW_IN" | "CORNER" | "GOAL_KICK"
   | "BALL_OUT" | "BLOCK" | "MATCH_ABANDONED" | "RESTART_SETUP";
 
-export type PitchRole = "GK" | "DEF" | "MID" | "FWD";
+export const PITCH_ROLES = ["GK", "DEF", "MID", "FWD"] as const;
+export type PitchRole = typeof PITCH_ROLES[number];
+
+const ROLE_BY_POSITION: Readonly<Record<string, PitchRole>> = {
+  GK: "GK",
+  DEF: "DEF", MID: "MID", FWD: "FWD",
+  CB: "DEF", LB: "DEF", RB: "DEF", LWB: "DEF", RWB: "DEF", SW: "DEF",
+  CDM: "MID", CM: "MID", CAM: "MID", LM: "MID", RM: "MID",
+  ST: "FWD", CF: "FWD", LW: "FWD", RW: "FWD", LF: "FWD", RF: "FWD", SS: "FWD",
+};
+
+export function isPitchRole(value: string): value is PitchRole {
+  return PITCH_ROLES.includes(value as PitchRole);
+}
+
+export function normalizePosition(position: string): PitchRole | undefined {
+  return ROLE_BY_POSITION[position.trim().toUpperCase()];
+}
+
+export function normalizePositions(positions: string | readonly string[]): PitchRole[] {
+  const values = typeof positions === "string" ? [positions] : positions;
+  const roles = new Set<PitchRole>();
+  for (const value of values) {
+    for (const position of value.split(",")) {
+      const role = normalizePosition(position);
+      if (role) roles.add(role);
+    }
+  }
+  return [...roles];
+}
 
 export interface PlayerAttributes {
   pace: number;
@@ -48,7 +77,7 @@ export interface HistoricalPlayer {
   fifaUpdate?: string;
   name: string;
   shortName?: string;
-  positions: string[];
+  positions: PitchRole[];
   overall: number;
   club?: string;
   nationality?: string;

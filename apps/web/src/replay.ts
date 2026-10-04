@@ -1,5 +1,8 @@
 import type { PitchPoint, ReplaySnapshot } from '@footballsimsim/shared'
 import type { MatchEvent, MatchResult } from './types'
+import { ballRollDegrees } from './ball-appearance'
+import { projectPitch } from './pitch-geometry'
+import { shotAnimation, type GoalkeeperMotion } from './goalkeeper-animation'
 
 export const HALF_TIME_BREAK_SECONDS = 5
 
@@ -16,7 +19,12 @@ export function matchTimeline(result: MatchResult, elapsed: number) {
   const seconds=Math.max(0,Math.min(totalSeconds,elapsed))
   const inHalfTime=breakSeconds>0 && seconds>=halfTime && seconds<halfTime+breakSeconds
   const minute=Math.min(duration,seconds<halfTime?seconds:inHalfTime?halfTime:seconds-breakSeconds)
-  return { minute, progress:minute/duration, half:halfTime/duration, inHalfTime,
+  // The bar has two equal halves. Each fills over its 45 regulation minutes and then holds while added time is played,
+  // so the half-time marker is always in the middle.
+  const regulationHalf=(result.regulationMinutes ?? 90)/2
+  const filled=(playedMinutes:number)=>Math.min(1,Math.max(0,playedMinutes/regulationHalf))
+  const progress=minute<=halfTime ? 0.5*filled(minute) : 0.5+0.5*filled(minute-halfTime)
+  return { minute, progress, half:0.5, inHalfTime,
     breakRemaining:inHalfTime?halfTime+breakSeconds-seconds:0, complete:seconds>=totalSeconds,
     period:(seconds>=halfTime+breakSeconds?2:1) as 1|2, totalSeconds }
 }
@@ -55,9 +63,16 @@ export function matchClock(result: MatchResult, minute: number, period?: 1 | 2) 
 const mix = (start: number, end: number, amount: number) => start + (end - start) * amount
 const smooth = (value: number) => value * value * (3 - 2 * value)
 
+export interface ReplayPlayerMotion {
+  facing: 1 | -1
+  direction: PitchPoint
+  activity: number
+  phase: number
+}
+
 // Event results are revealed at their timestamp. Movement fills the time between
 // those timestamps, so pause and speed controls share the same animation clock.
-export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | undefined, minute: number, holdHalfTime = false) {
+function baseReplayFrame(events: MatchEvent[], initial: ReplaySnapshot | undefined, minute: number, holdHalfTime = false) {
   const halfIndex=holdHalfTime?events.findIndex(event=>event.type==='half_time'):-1
   let low = 0, high = halfIndex>=0?halfIndex+1:events.length
   while (low < high) {
@@ -67,11 +82,35 @@ export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | unde
   }
   const visibleCount = low
   let rotation = 0
+  let rollDirection: PitchPoint = { x: 1, y: 0 }
   let priorBall = initial?.ball
+  let priorPlayers = initial?.players
+  let priorPeriod = initial?.period
+  const playerTravel = new Map<string, number>()
   for (let index = 0; index < visibleCount; index++) {
     if (index + 1 < visibleCount && events[index + 1]!.minute === events[index]!.minute) continue
+    const players = events[index]!.snapshot?.players
+    if (priorPlayers && players) {
+      const previous = new Map(priorPlayers.map(player => [player.key, player]))
+      // Changing ends is a scene reset, not a sprint across the field.
+      const sceneReset = events[index]!.snapshot?.period !== priorPeriod
+        || events[index]!.snapshot?.status === 'HALF_TIME'
+      if (!sceneReset) for (const player of players) {
+        const old = previous.get(player.key)
+        if (old) playerTravel.set(player.key, (playerTravel.get(player.key) ?? 0)
+          + Math.hypot((player.x - old.x) * 1.05, (player.y - old.y) * 0.68))
+      }
+    }
+    if (players) {
+      priorPlayers = players
+      priorPeriod = events[index]!.snapshot?.period
+    }
     const ball = events[index]!.snapshot?.ball
-    if (priorBall && ball) rotation += Math.hypot(ball.x - priorBall.x, ball.y - priorBall.y) * 9
+    if (priorBall && ball) {
+      rotation += ballRollDegrees(priorBall, ball)
+      const a = projectPitch(priorBall), b = projectPitch(ball)
+      if (Math.hypot(b.x-a.x, b.y-a.y) > 0.001) rollDirection = { x: b.x-a.x, y: b.y-a.y }
+    }
     if (ball) priorBall = ball
   }
   const latest = events[visibleCount - 1]
@@ -88,11 +127,12 @@ export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | unde
   const startMinute = latest?.minute ?? 0
   const duration = next ? next.minute - startMinute : 0
   const progress = duration > 0 ? Math.min(1, Math.max(0, (minute - startMinute) / duration)) : 1
-  if (!from || !next?.snapshot || !duration) return { visibleCount, snapshot: from, path: undefined, rotation }
+  const still = { visibleCount, snapshot: from, path: undefined, rotation, baseRotation: rotation, rollDirection, loft: 0, playerMotion: {} as Record<string, ReplayPlayerMotion> }
+  if (!from || !next?.snapshot || !duration) return still
   const to = next.snapshot
   // A half-time break holds the pitch until the new kickoff. Do not animate
   // players through one another as the two teams change ends.
-  if (from.status === 'HALF_TIME' || from.status === 'FULL_TIME' || from.status === 'ABANDONED') return { visibleCount, snapshot: from, path: undefined, rotation }
+  if (from.status === 'HALF_TIME' || from.status === 'FULL_TIME' || from.status === 'ABANDONED') return still
   const movement = smooth(progress)
   const destinations = new Map(to.players.map(player => [player.key, player]))
   // Keep the initiating pass when its result (e.g. an interception) shares the
@@ -120,9 +160,20 @@ export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | unde
   const flight = pass ? mix(flightProgress, smooth(flightProgress), 0.15) : smooth(progress)
   const distance = Math.hypot(to.ball.x - release.x, to.ball.y - release.y)
   // Small passing arc, with both endpoints exactly on the engine's ball positions.
-  const curve = pass ? Math.sin(Math.PI * flight) * (throwing ? (from.ball.y>50?-5:5) : Math.min(1.5, distance / 20)) : 0
+  // Ground curvature is independent of altitude; the pitch renderer draws
+  // the airborne ball above this position and its shadow at this position.
+  const curve = pass && !throwing ? Math.sin(Math.PI * flight) * Math.min(1.5, distance / 20) : 0
   const ball: PitchPoint = pass && flightProgress === 0 ? carriedBall(movement)
     : { x: mix(release.x, to.ball.x, flight), y: mix(release.y, to.ball.y, flight) - curve }
+  // Include dribbling before release. Normalize to the endpoint rotation so a
+  // new event does not reset the panel phase when a curved pass arrives.
+  const heldDistance = pass ? ballRollDegrees(from.ball, release) : 0
+  const routeDistance = heldDistance + ballRollDegrees(release, to.ball)
+  const traveled = pass && flightProgress === 0 ? ballRollDegrees(from.ball, ball)
+    : heldDistance + ballRollDegrees(release, to.ball) * flight
+  const rollProgress = routeDistance > 0 ? traveled / routeDistance : 0
+  const a = projectPitch(from.ball), b = projectPitch(to.ball)
+  if (Math.hypot(b.x-a.x, b.y-a.y) > 0.001) rollDirection = { x: b.x-a.x, y: b.y-a.y }
   return {
     visibleCount,
     snapshot: { ...from, ball, players: from.players.map(player => {
@@ -130,7 +181,53 @@ export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | unde
       return { ...player, x: mix(player.x, target.x, movement), y: mix(player.y, target.y, movement) }
     }) },
     path: distance > 3 && (!pass || flightProgress > 0) ? { from: release, to: to.ball, progress: flight } : undefined,
-    rotation: rotation + Math.hypot(to.ball.x - from.ball.x, to.ball.y - from.ball.y) * flight * 9,
+    rotation: rotation + ballRollDegrees(from.ball, to.ball) * rollProgress,
+    baseRotation: rotation,
+    rollDirection,
     loft: throwing ? Math.sin(Math.PI*flight)*0.3 : 0,
+    playerMotion: Object.fromEntries(from.players.map(player => {
+      const target = destinations.get(player.key) ?? player
+      const dx = target.x - player.x, dy = target.y - player.y
+      const distance = Math.hypot(dx * 1.05, dy * 0.68)
+      const point = { x: mix(player.x, target.x, movement), y: mix(player.y, target.y, movement) }
+      const a = projectPitch(point), b = projectPitch({ x: point.x + dx * 0.001, y: point.y + dy * 0.001 })
+      const screenDistance = Math.hypot(b.x - a.x, b.y - a.y)
+      const direction = screenDistance > 0.0001
+        ? { x: (b.x - a.x) / screenDistance, y: (b.y - a.y) / screenDistance }
+        : { x: from.direction[player.team], y: 0 }
+      // One cycle per eight metres keeps cadence proportional to travel. The
+      // accumulated phase survives event boundaries and freezes with replay time.
+      const offset = Array.from(player.key).reduce((hash, character) => (hash * 31 + character.charCodeAt(0)) >>> 0, 0) % 628 / 100
+      const phase = ((playerTravel.get(player.key) ?? 0) + distance * movement) * Math.PI * 2 / 8 + offset
+      // Pose follows distance traveled, never an independent CSS clock.
+      // These are movement cues, not engine-authored sprint claims.
+      return [player.key, {
+        facing: Math.abs(direction.x) > 0.05 ? (direction.x > 0 ? 1 : -1) : from.direction[player.team],
+        direction,
+        activity: Math.min(1, distance / duration / 9 * 6 * progress * (1 - progress)),
+        phase,
+      } satisfies ReplayPlayerMotion]
+    })),
+  }
+}
+
+export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | undefined, minute: number, holdHalfTime = false) {
+  const frame = baseReplayFrame(events, initial, minute, holdHalfTime)
+  const animation = shotAnimation(events, initial, minute, frame.visibleCount, frame.snapshot, holdHalfTime)
+  const keeperMotion: Record<string, GoalkeeperMotion> = {}
+  if (!animation || !frame.snapshot) return { ...frame, keeperMotion, shotActive: false }
+  if (animation.keeperActive) keeperMotion[animation.keeper.key] = animation.motion
+  const a = projectPitch(animation.from), b = projectPitch(animation.ball)
+  return { ...frame,
+    snapshot: { ...frame.snapshot, ball: animation.ball,
+      carrierKey: animation.airborne ? undefined : frame.snapshot.carrierKey,
+      players: frame.snapshot.players.map(player => player.key === animation.keeper.key ? { ...player, x: animation.keeper.x, y: animation.keeper.y }
+        : player.key === animation.shooter?.key ? { ...player, x: animation.shooter.x, y: animation.shooter.y } : player),
+    },
+    loft: animation.loft,
+    rotation: animation.airborne ? frame.rotation : frame.baseRotation,
+    rollDirection: { x: b.x - a.x, y: b.y - a.y },
+    keeperMotion,
+    shotActive: true,
   }
 }

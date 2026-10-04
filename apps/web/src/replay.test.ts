@@ -164,4 +164,34 @@ describe('match playback timing',()=>{
     start.snapshot!.status = 'HALF_TIME'
     expect(replayFrame([start, end], start.snapshot, 2).playerMotion).toEqual({})
   })
+  it.each([[0, 20], [0, -20], [20, 20], [-20, -20]])('projects movement direction for delta (%s, %s)', (dx, dy) => {
+    const start = event(0, 10), end = event(4, 70)
+    start.snapshot!.players = [player('runner', 50)]
+    end.snapshot!.players = [{ ...player('runner', 50 + dx), y: 48 + dy }]
+    const { direction } = replayFrame([start, end], start.snapshot, 2).playerMotion.runner
+    expect(Math.hypot(direction.x, direction.y)).toBeCloseTo(1)
+    expect(Math.sign(direction.y)).toBe(Math.sign(dy))
+    if (dx) expect(Math.sign(direction.x)).toBe(Math.sign(dx))
+  })
+  it('keeps gait phase continuous across events and lineup ordering changes', () => {
+    const start = event(0, 10), middle = event(4, 40), end = event(8, 70)
+    start.snapshot!.players = [player('runner', 10), player('other', 20)]
+    middle.snapshot!.players = [player('other', 20), player('runner', 40)]
+    end.snapshot!.players = [player('runner', 70), player('other', 20)]
+    const before = replayFrame([start, middle, end], start.snapshot, 4 - 0.00001).playerMotion.runner
+    const after = replayFrame([start, middle, end], start.snapshot, 4).playerMotion.runner
+    expect(before.phase).toBeCloseTo(after.phase, 6)
+    expect(after.activity).toBe(0)
+    expect(replayFrame([start, middle, end], start.snapshot, 2).playerMotion.other.activity).toBe(0)
+  })
+  it('scales cadence and stride activity with travel speed', () => {
+    const start = event(0, 10), slow = event(4, 20), fast = event(4, 70)
+    start.snapshot!.players = [player('runner', 10)]
+    slow.snapshot!.players = [player('runner', 20)]
+    fast.snapshot!.players = [player('runner', 70)]
+    const slowPose = replayFrame([start, slow], start.snapshot, 2).playerMotion.runner
+    const fastPose = replayFrame([start, fast], start.snapshot, 2).playerMotion.runner
+    expect(fastPose.activity).toBeGreaterThan(slowPose.activity)
+    expect(fastPose.phase).toBeGreaterThan(slowPose.phase)
+  })
 })

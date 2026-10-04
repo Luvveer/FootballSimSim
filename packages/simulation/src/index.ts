@@ -258,8 +258,12 @@ export function simulateMatch(config: MatchConfig): MatchResult {
     teamStats[side].expectedGoals = Math.round((teamStats[side].expectedGoals + xg) * 1000) / 1000;
     if (onTarget) { actorStats.shotsOnTarget++; teamStats[side].shotsOnTarget++; }
     const location = kind === "PENALTY" ? "from the penalty spot" : kind === "FREE_KICK" ? "from the free kick" : progress > 0.78 ? "inside the area" : "from distance";
-    emit("SHOT", side, actor, onTarget, `${name(actor)} shoots ${location}${blocked ? " — blocked." : onTarget ? "." : " — wide of the goal."}`,
+    const shot = emit("SHOT", side, actor, onTarget, `${name(actor)} shoots ${location}${blocked ? " — blocked." : onTarget ? "." : " — wide of the goal."}`,
       `Finishing ${Math.round(shooting)} vs keeper ${Math.round(keeping)} · distance ${Math.round(goalDistance)} pitch units · ${Math.round(xg * 100)}% goal chance.`, undefined, targetProbability, xg);
+    // Presentation placement has its own deterministic stream. Never consume
+    // the match RNG here: doing so would change every later outcome for a seed.
+    if (onTarget) shot.snapshot.ball.y = 42 + seededRandom(`${config.seed}:shot-placement:${shot.id}`)() * 16;
+    shot.ballMotion = { kind: "SHOT", from: { ...ball }, to: { ...shot.snapshot.ball } };
     if (blocked) {
       const blocker = weightedSelect(field(defendingSide), slot => Math.max(5, effective(slot, "defending")), random);
       emit("BLOCK", defendingSide, blocker, true, `${name(blocker)} blocks the shot.`, "The defender gets between the shot and the goal.", actor);
@@ -270,7 +274,8 @@ export function simulateMatch(config: MatchConfig): MatchResult {
       if (side === "HOME") score.home++; else score.away++;
       const assister = kind === "OPEN_PLAY" && lastPasser && lastPasser.player.id !== actor.player.id ? lastPasser : undefined;
       if (assister) playerStatsFor(side, assister).assists++;
-      emit("GOAL", side, actor, true, `${name(actor)} scores ${location}!`, assister ? `Created by ${name(assister)}; the finish beats the goalkeeper.` : "The ball crosses the goal line between the posts.", assister, goalGivenTarget, xg);
+      const goal = emit("GOAL", side, actor, true, `${name(actor)} scores ${location}!`, assister ? `Created by ${name(assister)}; the finish beats the goalkeeper.` : "The ball crosses the goal line between the posts.", assister, goalGivenTarget, xg);
+      goal.snapshot.ball.y = shot.snapshot.ball.y;
       queueRestart("KICKOFF", defendingSide, { x: 50, y: 50 });
     } else if (onTarget) {
       playerStatsFor(defendingSide, goalie).saves++; teamStats[defendingSide].saves++;

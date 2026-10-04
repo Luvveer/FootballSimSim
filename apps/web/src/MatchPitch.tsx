@@ -67,28 +67,32 @@ function PlayerFigure({ player, motion, keeperMotion, carrier, throwing }: {
     '--dive-x': `${keeperMotion.offset.x}px`, '--dive-y': `${keeperMotion.offset.y}px`,
     '--dive-mobile-x': `${keeperMotion.mobileOffset.x}px`, '--dive-mobile-y': `${keeperMotion.mobileOffset.y}px`,
     '--dive-angle': `${keeperMotion.rotation}deg`,
+    '--dive-body-scale': keeperMotion.bodyScale,
+    '--dive-shadow-x': `${keeperMotion.shadow.x}px`, '--dive-shadow-y': `${keeperMotion.shadow.y}px`,
+    '--dive-mobile-shadow-x': `${keeperMotion.mobileShadow.x}px`, '--dive-mobile-shadow-y': `${keeperMotion.mobileShadow.y}px`,
   } as CSSProperties : undefined
   const parts = player.name.split(' ')
   const last = parts.at(-1) ?? player.name
   const surname = /^(Jr\.?|Sr\.?|II|III)$/.test(last) ? parts.slice(-2).join(' ') : last
   const name = surname.length > 16 ? `${surname.slice(0, 15)}…` : surname
   return <g transform={`translate(${position.x} ${position.y})`} className={`pitch-person ${player.team.toLowerCase()} ${player.role === 'GK' ? 'keeper' : ''} ${carrier ? 'has-ball' : ''}`} tabIndex={0} role="img" aria-label={`${player.name}, ${player.team === 'HOME' ? 'home' : 'away'}, ${player.slotId}, energy ${player.energy}%${carrier ? ', on the ball' : ''}${player.yellowCards ? ', yellow card' : ''}`}>
-    <g transform={`scale(${position.scale})`}>
-      <ellipse className="pitch-person-shadow" cx="3" cy="2" rx="15" ry="5"/>
+    <g transform={`scale(${position.scale})`} style={keeperStyle}>
+      <ellipse className={`pitch-person-shadow${keeperMotion ? ' is-saving' : ''}`} cx="3" cy="2" rx="15" ry="5"/>
       <g className="pitch-figure-body">
         <g className="pitch-movement-pose" transform={`translate(${pose.lean} ${-pose.bob})`}>
-          <g className={keeperMotion ? 'pitch-keeper-pose' : undefined} style={keeperStyle} data-keeper-stage={keeperMotion?.stage}>
+          <g className={keeperMotion ? 'pitch-keeper-pose' : undefined} data-keeper-stage={keeperMotion?.stage} data-dive-side={keeperMotion?.diveSide}>
             {pose.legs.map(leg => <g key={leg.side}>
               <path className="pitch-limb" d={leg.path}/>
               <path className="pitch-boot" d={leg.boot}/>
             </g>)}
-            <path className="pitch-arm" d={throwing ? 'M-9,-32 L-16,-43 L-5,-51 M9,-32 L16,-43 L5,-51' : pose.arms}/>
-            {dive?.hands.map((hand, index) => <circle key={index} className="pitch-keeper-glove" cx={hand.x} cy={hand.y} r="3.2"/>)}
+            {!dive && <path className="pitch-arm" d={throwing ? 'M-9,-32 L-16,-43 L-5,-51 M9,-32 L16,-43 L5,-51' : pose.arms}/>}
             <path className="pitch-shirt" d="M-6,-37 L-13,-32 L-10,-26 L-8,-28 L-8,-17 Q0,-14 8,-17 L8,-28 L10,-26 L13,-32 L6,-37 Z"/>
             <path className="pitch-shirt-detail" d="M-8,-27 H8 M-3,-37 Q0,-32 3,-37"/>
             <path className="pitch-shorts" d="M-8,-18 H8 L9,-12 H2 L0,-16 L-2,-12 H-9 Z"/>
             <circle className="pitch-head" cx="0" cy="-44" r="6.5"/>
             <path className="pitch-hair" d="M-6,-45 Q-5,-53 2,-50 Q6,-49 6,-44 L3,-46 L-5,-45 Z"/>
+            {dive && <path className="pitch-arm" d={pose.arms}/>}
+            {dive?.hands.map((hand, index) => <circle key={index} className="pitch-keeper-glove" cx={hand.x} cy={hand.y} r="3.2"/>)}
             {player.yellowCards > 0 && <rect className="pitch-yellow-card" x="13" y="-40" width="5" height="8" rx="1"/>}
           </g>
         </g>
@@ -121,7 +125,7 @@ export function MatchPitch({ snapshot, frame, minute, event, celebration, decisi
   const homeDirection = snapshot.direction.HOME
   const scoringDirection = celebration?.snapshot?.direction[celebration.team === 'home' ? 'HOME' : 'AWAY'] ?? (celebration?.team === 'home' ? homeDirection : -homeDirection)
   const ballPoint = !frame.shotActive && event?.type === 'goal' && snapshot.phase === 'GOAL'
-    ? goalBallPosition(snapshot.ball, snapshot.direction[event.team === 'home' ? 'HOME' : 'AWAY'], minute - event.minute)
+    ? goalBallPosition(event.snapshot?.ball ?? snapshot.ball, snapshot.direction[event.team === 'home' ? 'HOME' : 'AWAY'], minute - event.minute)
     : snapshot.ball
   const players = [...snapshot.players].sort((a, b) => a.y - b.y)
   const title = `${snapshot.possession === 'HOME' ? homeName : awayName} possession. ${event?.detail ?? 'Kick off'}`

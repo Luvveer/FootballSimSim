@@ -49,6 +49,23 @@ describe("football match lifecycle", () => {
       expect(shot.ballMotion?.from.y).toBeLessThanOrEqual(100);
     }
   });
+  it("places on-target shots inside the posts and carries the target through goals", () => {
+    const targets: number[] = [];
+    for (let seed = 0; seed < 10; seed++) {
+      const result = simulateMatch(config(`shot-placement-${seed}`));
+      result.events.forEach((event, index) => {
+        if (event.type !== "SHOT" || !event.successful) return;
+        const target = event.ballMotion!.to;
+        expect(target.y).toBeGreaterThanOrEqual(42);
+        expect(target.y).toBeLessThanOrEqual(58);
+        targets.push(target.y);
+        if (result.events[index + 1]?.type === "GOAL") expect(result.events[index + 1]!.snapshot.ball.y).toBe(target.y);
+      });
+    }
+    expect(targets.some(y => y < 48)).toBe(true);
+    expect(targets.some(y => y > 52)).toBe(true);
+    expect(targets.some(y => Math.abs(y - 50) < 1)).toBe(true);
+  });
   it("plays two halves with opposite kickoff teams, switched ends and added time", () => {
     const result = simulateMatch(config("rules-halves"));
     const half = result.events.find(e=>e.type==="HALF_TIME")!;

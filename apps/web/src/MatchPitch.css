@@ -35,7 +35,8 @@
 .pitch-person:focus-visible .pitch-shirt { stroke: var(--pitch-gold); stroke-width: 2.5; }
 .pitch-limb, .pitch-arm { fill: none; stroke: oklch(80% 0.07 60); stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round; }
 .pitch-boot { fill: none; stroke: var(--pitch-ink); stroke-width: 4; stroke-linecap: round; }
-.pitch-keeper-pose { transform-origin: 0 -17px; transform: translate(var(--dive-x), var(--dive-y)) rotate(var(--dive-angle)); }
+.pitch-keeper-pose { transform-origin: 0 -17px; transform: translate(var(--dive-x), var(--dive-y)) rotate(var(--dive-angle)) scale(1, var(--dive-body-scale)); }
+.pitch-person-shadow.is-saving { transform: translate(var(--dive-shadow-x), var(--dive-shadow-y)); }
 .pitch-keeper-glove { fill: var(--pitch-away); stroke: var(--pitch-ink); stroke-width: 0.8; }
 .pitch-shirt { fill: var(--kit); stroke: oklch(19% 0.027 155 / 0.65); stroke-width: 1; }
 .pitch-shirt-detail { fill: none; stroke: var(--kit-detail); stroke-width: 1.6; opacity: 0.85; }
@@ -76,7 +77,8 @@
 @media (max-width: 500px) {
   .match-pitch-scene { margin-top: 12px; margin-bottom: 10px; }
   .pitch-figure-body { transform: scale(1.25); }
-  .pitch-keeper-pose { transform: translate(var(--dive-mobile-x), var(--dive-mobile-y)) rotate(var(--dive-angle)); }
+  .pitch-keeper-pose { transform: translate(var(--dive-mobile-x), var(--dive-mobile-y)) rotate(var(--dive-angle)) scale(1, var(--dive-body-scale)); }
+  .pitch-person-shadow.is-saving { transform: translate(var(--dive-mobile-shadow-x), var(--dive-mobile-shadow-y)); }
   .pitch-name-label text { font-size: 22px; paint-order: stroke; stroke: var(--pitch-ink); stroke-width: 4px; }
   .pitch-name-label rect, .pitch-energy-base, .pitch-energy-fill { display: none; }
   .pitch-offside-label text { font-size: 22px; }
@@ -87,4 +89,5 @@
 @media (prefers-reduced-motion: reduce) {
   .pitch-movement-pose { transform: none; }
   .pitch-keeper-pose { transform: none; }
+  .pitch-person-shadow.is-saving { transform: none; }
 }

@@ -9,6 +9,7 @@ export interface AppOptions {
   repository?: PlayerRepository;
   csvPath?: string;
   logger?: boolean;
+  routePrefix?: string;
 }
 
 function integerQuery(value: unknown, fallback: number, minimum: number, maximum: number): number {
@@ -20,20 +21,21 @@ function integerQuery(value: unknown, fallback: number, minimum: number, maximum
 export async function buildApp(options: AppOptions = {}): Promise<FastifyInstance> {
   const repository = options.repository ?? await PlayerRepository.load(options.csvPath);
   const app = Fastify({ logger: options.logger ?? false });
+  const routePrefix = options.routePrefix?.replace(/\/$/, "") ?? "";
   await app.register(cors, { origin: true });
 
-  app.get("/health", async () => ({ status: "ok", players: repository.all().length }));
+  app.get(`${routePrefix}/health`, async () => ({ status: "ok", players: repository.all().length }));
 
-  app.get("/players/versions", async () => ({ versions: repository.versions() }));
+  app.get(`${routePrefix}/players/versions`, async () => ({ versions: repository.versions() }));
 
-  app.get<{ Params: { playerId: string } }>("/players/:playerId/versions", async (request, reply) => {
+  app.get<{ Params: { playerId: string } }>(`${routePrefix}/players/:playerId/versions`, async (request, reply) => {
     const players = repository.versionsFor(request.params.playerId);
     if (players.length === 0) return reply.code(404).send({ error: "Player not found" });
     return { players };
   });
 
   app.get<{ Querystring: { q?: string; version?: string; position?: string; limit?: string; offset?: string } }>(
-    "/players",
+    `${routePrefix}/players`,
     async (request) => repository.search({
       query: request.query.q,
       version: request.query.version,
@@ -44,7 +46,7 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
   );
 
   app.get<{ Params: { playerId: string }; Querystring: { version?: string } }>(
-    "/players/:playerId",
+    `${routePrefix}/players/:playerId`,
     async (request, reply) => {
       const version = request.query.version;
       const player = version
@@ -55,7 +57,7 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
     },
   );
 
-  app.post<{ Body: unknown }>("/matches/simulate", async (request, reply) => {
+  app.post<{ Body: unknown }>(`${routePrefix}/matches/simulate`, async (request, reply) => {
     let config: MatchConfig;
     try {
       config = matchConfigFromRequest(request.body, repository);

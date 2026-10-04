@@ -87,7 +87,7 @@ export async function simulateMatch(homeName: string, awayName: string, home: Li
       player: String(names.get(event.playerId) ?? ''), detail: event.description,
       homeScore: event.score.home, awayScore: event.score.away,
       playerId: event.playerId, assistId: event.secondaryPlayerId, snapshot: event.snapshot, explanation: event.explanation, successful: event.successful, expectedGoals: event.expectedGoals,
-      offside: event.offside, restart: event.restart,
+      offside: event.offside, restart: event.restart, ballMotion:event.ballMotion,
     })),
     playerRatings: raw.playerStats.map((player) => ({ player:player.playerName, playerId:player.playerId, team:player.team === 'AWAY' ? 'away' : 'home', rating:player.rating, yellowCards:player.yellowCards, redCards:player.redCards })),
     manOfTheMatch: { player:raw.manOfTheMatch.playerName, playerId:raw.manOfTheMatch.playerId, team:raw.manOfTheMatch.team === 'AWAY' ? 'away' : 'home', rating:raw.manOfTheMatch.rating },

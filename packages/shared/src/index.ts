@@ -9,7 +9,7 @@ export type MatchEventType =
   | "GOAL" | "KICKOFF" | "HALF_TIME" | "FULL_TIME" | "ADDED_TIME"
   | "OFFSIDE" | "FOUL" | "ADVANTAGE" | "YELLOW_CARD" | "RED_CARD"
   | "FREE_KICK" | "PENALTY" | "THROW_IN" | "CORNER" | "GOAL_KICK"
-  | "BALL_OUT" | "BLOCK" | "MATCH_ABANDONED";
+  | "BALL_OUT" | "BLOCK" | "MATCH_ABANDONED" | "RESTART_SETUP";
 
 export type PitchRole = "GK" | "DEF" | "MID" | "FWD";
 
@@ -102,6 +102,7 @@ export interface MatchEvent {
   expectedGoals?: number;
   offside?: OffsideDecision;
   restart?: RestartType;
+  ballMotion?: { kind: "PASS" | "THROW_IN" | "SHOT" | "DRIBBLE"; from: PitchPoint; to: PitchPoint };
 }
 
 export type RestartType = "KICKOFF" | "FREE_KICK" | "PENALTY" | "THROW_IN" | "CORNER" | "GOAL_KICK";
@@ -122,6 +123,16 @@ export interface ReplayPlayer extends PitchPoint {
   slotId: string;
   energy: number;
   yellowCards: number;
+  role: PitchRole;
+}
+export interface TeamTactics {
+  style: "POSSESSION" | "DIRECT" | "BALANCED";
+  mentality: "BALANCED" | "CHASE_GAME" | "PROTECT_LEAD";
+  tempo: number;
+  lineHeight: number;
+  width: number;
+  pressing: number;
+  risk: number;
 }
 export interface TeamProfile {
   attack: number;
@@ -138,6 +149,9 @@ export interface ReplaySnapshot {
   direction: Record<TeamSide, 1 | -1>;
   status: "PLAY" | "STOPPAGE" | "HALF_TIME" | "FULL_TIME" | "ABANDONED";
   teamStats: Record<TeamSide, TeamMatchStats>;
+  carrierKey?: string;
+  tactics?: Record<TeamSide, TeamTactics>;
+  restart?: { type: RestartType; team: TeamSide; takerKey: string; spot: PitchPoint; ready: boolean };
 }
 
 export interface PlayerMatchStats {

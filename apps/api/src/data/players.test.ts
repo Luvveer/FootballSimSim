@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { PlayerRepository, parsePlayers } from "./players.js";
 
 const header = "player_id,fifa_version,fifa_update,update_as_of,short_name,long_name,player_positions,overall,club_name,nationality_name";
@@ -26,7 +27,7 @@ describe("player data", () => {
   });
 
   it("groups one player's FIFA versions in chronological order", async () => {
-    const repository = await PlayerRepository.load(new URL("../../test/players.csv", import.meta.url).pathname);
+    const repository = await PlayerRepository.load(fileURLToPath(new URL("../../test/players.csv", import.meta.url)));
     expect(repository.versionsFor("1").map((player) => player.fifa_version)).toEqual(["19", "20"]);
     expect(repository.versionsFor("missing")).toEqual([]);
   });

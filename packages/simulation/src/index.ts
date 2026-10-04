@@ -3,6 +3,7 @@ import type {
   PlayerAttributes, PlayerMatchStats, ReplaySnapshot, RestartType, PitchPoint, Team, TeamMatchStats, TeamProfile, TeamSide,
 } from "@footballsimsim/shared";
 import { TEAM_SIZE } from "@footballsimsim/shared";
+import { distance, movementTarget, moveToward, teamTactics } from "./movement.js";
 import { seededRandom } from "./random.js";
 import { boundaryRestart, cardForChallenge, checkOffside, inPenaltyArea } from "./rules.js";
 
@@ -102,7 +103,8 @@ export function simulateMatch(config: MatchConfig): MatchResult {
   let lastPasser: LineupSlot | undefined;
   let mustPass = false;
   let directRestart: RestartType | undefined;
-  let pending: { type: RestartType; team: TeamSide; spot: PitchPoint; indirect: boolean } | undefined = { type: "KICKOFF", team: side, spot: { x: 50, y: 50 }, indirect: false };
+  let pending: { type: RestartType; team: TeamSide; spot: PitchPoint; indirect: boolean; ready: boolean } | undefined = { type: "KICKOFF", team: side, spot: { x: 50, y: 50 }, indirect: false, ready: true };
+  let deliverySpot: PitchPoint | undefined;
   const direction = (teamSide: TeamSide): 1 | -1 => (teamSide === "HOME") === (period === 1) ? 1 : -1;
   const ownX = (x: number, teamSide = side) => direction(teamSide) === 1 ? x : 100 - x;
   const worldX = (x: number, teamSide = side) => direction(teamSide) === 1 ? x : 100 - x;
@@ -110,36 +112,87 @@ export function simulateMatch(config: MatchConfig): MatchResult {
   const playerStatsFor = (teamSide: TeamSide, slot: LineupSlot) => stats.get(playerKey(teamSide, slot.player))!;
   const energy = (slot: LineupSlot) => clamp(100 - minute * (0.15 + (100 - attribute(slot.player, "stamina", "physical")) / 200), 50, 100);
   const effective = (slot: LineupSlot, kind: Parameters<typeof skill>[1]) => skill(slot, kind) * (0.8 + energy(slot) / 500);
-  const snapshot = (phase: ReplaySnapshot["phase"] = pending ? "RESTART" : progress > 0.7 ? "ATTACK" : progress > 0.4 ? "PROGRESSION" : "BUILDUP"): ReplaySnapshot => {
-    const players = (["HOME", "AWAY"] as const).flatMap(teamSide => teams[teamSide].lineup.filter(slot => !dismissed.has(playerKey(teamSide, slot.player))).map((slot, index) => {
-      const ownProgress = teamSide === side ? progress : 1 - progress;
-      const base = slot.role === "GK" ? 0.07 : slot.role === "DEF" ? 0.25 : slot.role === "FWD" ? 0.66 : 0.44;
-      let x = slot.role === "GK" ? base : clamp(base + (ownProgress - 0.45) * 0.38, 0.15, 0.88);
-      let y = slot.slotId === "LM" ? 24 : slot.slotId === "RM" ? 76 : slot.slotId === "CAM" ? (teamSide === "HOME" ? 44 : 58) : slot.role === "GK" || slot.role === "FWD" ? 50 : index % 2 ? 34 : 66;
-      if (teamSide === side && slot.player.id === carrier.player.id && slot.role !== "GK") { x = 0.12 + progress * 0.78; y = slot.slotId === "LM" ? 28 : slot.slotId === "RM" ? 72 : slot.slotId === "CAM" ? (teamSide === "HOME" ? 44 : 58) : 50; }
-      if (pending?.type === "KICKOFF" && slot.role !== "GK") x = Math.min(x, 0.46);
-      const point = { x: worldX(x * 100, teamSide), y };
-      if (pending && teamSide === side && slot.player.id === carrier.player.id) { point.x = pending.spot.x; point.y = clamp(pending.spot.y - 4, 8, 92); }
-      if (pending && !(teamSide === side && slot.player.id === carrier.player.id)) {
-        if (pending.type === "PENALTY") {
-          if (teamSide !== side && slot.role === "GK") { point.x = worldX(100); point.y = 50; }
-          else { point.x = worldX(Math.min(ownX(point.x), 78)); }
-        } else if (teamSide !== side && ["KICKOFF", "FREE_KICK", "CORNER"].includes(pending.type)) {
-          // Coordinates are percentages of a 105 × 68 metre pitch.
-          const dx = (point.x - pending.spot.x) * 1.05, dy = (point.y - pending.spot.y) * 0.68;
-          const distance = Math.hypot(dx, dy);
-          if (distance < 9.15) point.y = clamp(pending.spot.y + (pending.spot.y < 14 ? 1 : pending.spot.y > 86 ? -1 : dy < 0 ? -1 : 1) * Math.sqrt(9.15 ** 2 - dx ** 2) / 0.68, 4, 96);
-        } else if (pending.type === "GOAL_KICK" && teamSide !== side && ownX(point.x) < 17 && point.y >= 21 && point.y <= 79) point.x = worldX(18);
+  const positions = new Map<string, PitchPoint>();
+  const activeTeam = (teamSide: TeamSide) => ({ ...teams[teamSide], lineup: teams[teamSide].lineup.filter(slot => !dismissed.has(playerKey(teamSide, slot.player))) });
+  const tactics = (teamSide: TeamSide) => teamTactics(activeTeam(teamSide), teamSide === "HOME" ? score.home : score.away, teamSide === "HOME" ? score.away : score.home, minute, regulation);
+  const position = (teamSide: TeamSide, slot: LineupSlot) => positions.get(playerKey(teamSide, slot.player))!;
+  const resetShape = () => {
+    for (const teamSide of ["HOME", "AWAY"] as const) teams[teamSide].lineup.forEach((slot,index)=> {
+      const x=slot.role === "GK" ? 7 : slot.role === "DEF" ? 27 : slot.role === "FWD" ? 45 : 37;
+      const y=slot.slotId === "LM" ? 25 : slot.slotId === "RM" ? 75 : slot.role === "GK" || slot.role === "FWD" ? 50 : index%2 ? 35 : 65;
+      positions.set(playerKey(teamSide,slot.player),{x:worldX(x,teamSide),y});
+    });
+  };
+  resetShape();
+  positions.set(playerKey(side,carrier.player),{x:50,y:48});
+  const ballPosition = ():PitchPoint => pending ? {...pending.spot} : deliverySpot && mustPass ? {...deliverySpot} : {x:position(side,carrier).x,y:clamp(position(side,carrier).y+2,0,100)};
+  const updateProgress = () => { progress=clamp((ownX(ballPosition().x)/100-0.12)/0.78,0.08,0.98); };
+  const restartTarget = (teamSide:TeamSide,slot:LineupSlot,target:PitchPoint):PitchPoint => {
+    if (!pending) return target;
+    if (teamSide===side && slot.player.id===carrier.player.id) return {x:pending.spot.x,y:pending.type==="THROW_IN"?pending.spot.y:clamp(pending.spot.y-2,0,100)};
+    if(pending.type==="KICKOFF" && slot.role!=="GK") target.x=worldX(Math.min(ownX(target.x,teamSide),46),teamSide);
+    if(pending.type==="PENALTY") {
+      if(teamSide!==side && slot.role==="GK") return {x:worldX(100),y:50};
+      target.x=worldX(Math.min(ownX(target.x),78));
+    } else if(teamSide!==side && ["KICKOFF","FREE_KICK","CORNER","THROW_IN"].includes(pending.type)) {
+      const minimum=pending.type==="THROW_IN"?2:9.15;
+      const dx=(target.x-pending.spot.x)*1.05,dy=(target.y-pending.spot.y)*0.68;
+      if(Math.hypot(dx,dy)<minimum) target.y=clamp(pending.spot.y+(pending.spot.y<14?1:pending.spot.y>86?-1:dy<0?-1:1)*Math.sqrt(minimum**2-dx**2)/0.68,2,98);
+    } else if(pending.type==="GOAL_KICK" && teamSide!==side && ownX(target.x)<17 && target.y>=21 && target.y<=79) target.x=worldX(18);
+    return target;
+  };
+  const movePlayers = (elapsed:number) => {
+    const ball=ballPosition(), next=new Map(positions);
+    const opponentLine=field(opponent(side)).concat(keeper(teams[opponent(side)])).map(slot=>ownX(position(opponent(side),slot).x)).sort((a,b)=>b-a)[1] ?? 80;
+    for(const teamSide of ["HOME","AWAY"] as const) {
+      const plan=tactics(teamSide), attacking=teamSide===side;
+      const coveringPlayer=[...field(teamSide)].filter(slot=>slot.role!=="FWD").sort((a,b)=>effective(b,"defending")-effective(a,"defending"))[0];
+      const pressingPlayer=[...field(teamSide)].sort((a,b)=>distance(position(teamSide,a),ball)/(10+effective(a,"defending"))-distance(position(teamSide,b),ball)/(10+effective(b,"defending")))[0];
+      activeTeam(teamSide).lineup.forEach((slot,index)=> {
+        const holder=attacking && slot.player.id===carrier.player.id;
+        const localBall={x:ownX(ball.x,teamSide),y:ball.y};
+        const movementRole=!attacking && slot===coveringPlayer && slot.role==="MID"?{...slot,role:"DEF" as const}:slot;
+        let target=movementTarget(movementRole,index,localBall,attacking,plan,minute,opponentLine,holder);
+        if(!attacking && slot===pressingPlayer && !pending) {
+          target={x:clamp(localBall.x-2-plan.pressing*2,8,92),y:localBall.y};
+        } else if(!attacking && slot.role!=="GK") {
+          const threats=field(side).filter(p=>p!==carrier).sort((a,b)=>ownX(position(side,a).x,teamSide)-ownX(position(side,b).x,teamSide));
+          const mark=threats[(index-1)%Math.max(1,threats.length)];
+          if(mark) target.y=target.y*0.55+position(side,mark).y*0.45;
+        }
+        target={x:worldX(target.x,teamSide),y:target.y};
+        target=restartTarget(teamSide,slot,target);
+        if(holder && mustPass && deliverySpot && !pending) target={...position(teamSide,slot)};
+        next.set(playerKey(teamSide,slot.player),moveToward(position(teamSide,slot),target,attribute(slot.player,"pace","physical"),energy(slot),elapsed));
+      });
+    }
+    for(const [key,point] of next) positions.set(key,point);
+    // Support players hold separate passing lanes instead of piling up on the
+    // carrier. The nearest pressing opponent may still close to tackle.
+    for(const teamSide of ["HOME","AWAY"] as const) {
+      const players=field(teamSide);
+      for(let i=0;i<players.length;i++) for(let j=i+1;j<players.length;j++) {
+        const a=position(teamSide,players[i]!),b=position(teamSide,players[j]!);
+        if(distance(a,b)<5 && !pending) {
+          const shift=(a.y<=b.y?-1:1)*1.6;
+          if(players[i]!==carrier) a.y=clamp(a.y+shift,8,92);
+          if(players[j]!==carrier) b.y=clamp(b.y-shift,8,92);
+        }
       }
-      return { key: playerKey(teamSide, slot.player), playerId: slot.player.id, name: name(slot), team: teamSide, slotId: slot.slotId,
-        ...point, energy: Math.round(energy(slot)), yellowCards: playerStatsFor(teamSide, slot).yellowCards };
-    }));
-    const holder = players.find(p => p.key === playerKey(side, carrier.player))!;
-    const total = possessionTime.HOME + possessionTime.AWAY;
-    const homePossession = total ? Math.round(possessionTime.HOME / total * 100) : 50;
-    return { players, ball: pending ? { ...pending.spot } : { x: holder.x, y: holder.y + 4 }, possession: side, phase, period,
-      direction: { HOME: direction("HOME"), AWAY: direction("AWAY") }, status: pending ? "STOPPAGE" : "PLAY",
-      teamStats: { HOME: { ...teamStats.HOME, possession: homePossession }, AWAY: { ...teamStats.AWAY, possession: 100 - homePossession } } };
+    }
+    if(!pending) updateProgress();
+  };
+  const snapshot = (phase: ReplaySnapshot["phase"] = pending ? "RESTART" : progress > 0.7 ? "ATTACK" : progress > 0.4 ? "PROGRESSION" : "BUILDUP"): ReplaySnapshot => {
+    const players=(["HOME","AWAY"] as const).flatMap(teamSide=>activeTeam(teamSide).lineup.map(slot=>({
+      key:playerKey(teamSide,slot.player),playerId:slot.player.id,name:name(slot),team:teamSide,slotId:slot.slotId,role:slot.role,
+      ...position(teamSide,slot),energy:Math.round(energy(slot)),yellowCards:playerStatsFor(teamSide,slot).yellowCards,
+    })));
+    const total=possessionTime.HOME+possessionTime.AWAY;
+    const homePossession=total?Math.round(possessionTime.HOME/total*100):50;
+    return {players,ball:ballPosition(),possession:side,phase,period,direction:{HOME:direction("HOME"),AWAY:direction("AWAY")},status:pending?"STOPPAGE":"PLAY",
+      carrierKey:playerKey(side,carrier.player),tactics:{HOME:tactics("HOME"),AWAY:tactics("AWAY")},
+      restart:pending?{type:pending.type,team:side,takerKey:playerKey(side,carrier.player),spot:{...pending.spot},ready:pending.ready}:undefined,
+      teamStats:{HOME:{...teamStats.HOME,possession:homePossession},AWAY:{...teamStats.AWAY,possession:100-homePossession}}};
   };
   const initialSnapshot = snapshot();
   const emit = (type: MatchEventType, eventSide: TeamSide, actor: LineupSlot, successful: boolean, description: string,
@@ -155,22 +208,30 @@ export function simulateMatch(config: MatchConfig): MatchResult {
     events.push(event);
     return event;
   };
-  const turnover = (newSide: TeamSide, holder?: LineupSlot, counter = false) => {
+  const turnover = (newSide: TeamSide, holder?: LineupSlot) => {
     side = newSide;
     carrier = holder ?? weightedSelect(field(side), slot => (slot.role === "MID" ? 1.5 : 1) * Math.max(10, skill(slot, "passing")), random);
-    progress = counter ? clamp(1 - progress, 0.25, 0.65) : 0.3;
+    deliverySpot=undefined;
+    updateProgress();
     lastPasser = undefined; mustPass = false; directRestart = undefined;
   };
   const queueRestart = (type: RestartType, restartSide: TeamSide, spot: PitchPoint, indirect = false) => {
     turnover(restartSide);
     if (type === "PENALTY") spot = { x: worldX(89, restartSide), y: 50 };
     if (type === "GOAL_KICK") carrier = keeper(teams[side]);
-    else if (type === "PENALTY" || type === "FREE_KICK") carrier = weightedSelect(field(side), slot => Math.max(5, effective(slot, "shooting")), random);
+    else carrier=weightedSelect(field(side),slot=> {
+      const takingSkill=type==="PENALTY"?effective(slot,"shooting"):effective(slot,"passing");
+      return Math.max(5,takingSkill)/(5+distance(position(side,slot),spot));
+    },random);
     progress = clamp((ownX(spot.x) / 100 - 0.12) / 0.78, 0.15, 0.95);
-    pending = { type, team: restartSide, spot, indirect };
+    pending = { type, team: restartSide, spot, indirect, ready:false };
     if (type === "CORNER") teamStats[side].corners++;
     if (type === "FREE_KICK") teamStats[side].freeKicks++;
     if (type === "PENALTY") teamStats[side].penalties++;
+    if(type!=="KICKOFF") {
+      const setup=emit("RESTART_SETUP",side,carrier,true,`${name(carrier)} moves into position for the ${type.toLowerCase().replaceAll("_"," ")}.`,"The ball stays at the restart spot while teammates find space and opponents organise.");
+      setup.restart=type;
+    }
   };
   const ballOut = (boundary: "TOUCHLINE" | "GOAL_LINE", lastTouch: "ATTACK" | "DEFENCE", attackingSide: TeamSide, actor: LineupSlot) => {
     const type = boundaryRestart(boundary, lastTouch);
@@ -179,15 +240,17 @@ export function simulateMatch(config: MatchConfig): MatchResult {
     const out = emit("BALL_OUT", lastTouch === "ATTACK" ? attackingSide : opponent(attackingSide), actor, false,
       `The ball crosses the ${boundary === "TOUCHLINE" ? "touchline" : "goal line"}.`, `${type.replaceAll("_", " ")} to ${teams[restartSide].name}; awarded from the last touch.`);
     out.snapshot.ball = point; out.snapshot.status = "STOPPAGE"; out.restart = type;
-    queueRestart(type, restartSide, type === "CORNER" ? { x: worldX(96, attackingSide), y: random() < 0.5 ? 4 : 96 } : type === "GOAL_KICK" ? { x: worldX(7, restartSide), y: 50 } : { x: point.x, y: point.y === 0 ? 4 : 96 });
+    queueRestart(type, restartSide, type === "CORNER" ? { x: worldX(96, attackingSide), y: random() < 0.5 ? 4 : 96 } : type === "GOAL_KICK" ? { x: worldX(7, restartSide), y: 50 } : { ...point });
   };
   const shoot = (kind: "OPEN_PLAY" | "PENALTY" | "FREE_KICK" = "OPEN_PLAY") => {
     const attackingSide = side, defendingSide = opponent(side), actor = carrier;
     const actorStats = playerStatsFor(side, actor), goalie = keeper(teams[defendingSide]);
     const shooting = kind === "PENALTY" ? average([attribute(actor.player, "penalties", "shooting"), attribute(actor.player, "composure", "shooting")]) : effective(actor, "shooting");
     const keeping = effective(goalie, "keeping");
-    const targetProbability = kind === "PENALTY" ? clamp(0.72 + shooting / 650, 0.72, 0.94) : clamp(0.38 + (shooting - 50) / 150 + (progress - 0.6) * 0.3 - (kind === "FREE_KICK" ? 0.08 : 0), 0.22, 0.82);
-    const goalGivenTarget = chance(shooting, keeping, kind === "PENALTY" ? 0.82 : 0.15 + (progress - 0.5) * 0.55 - (kind === "FREE_KICK" ? 0.06 : 0), 0.06, 0.94);
+    const ball=ballPosition(), goalDistance=distance({x:worldX(100),y:50},ball), angle=Math.abs(ball.y-50)/50;
+    const shotProgress=clamp(1-goalDistance/100,0.2,0.98);
+    const targetProbability = kind === "PENALTY" ? clamp(0.72 + shooting / 650, 0.72, 0.94) : clamp(0.38 + (shooting - 50) / 150 + (shotProgress - 0.6) * 0.3 - angle * 0.15 - (kind === "FREE_KICK" ? 0.08 : 0), 0.22, 0.82);
+    const goalGivenTarget = chance(shooting, keeping, kind === "PENALTY" ? 0.82 : 0.15 + (shotProgress - 0.5) * 0.55 - angle * 0.1 - (kind === "FREE_KICK" ? 0.06 : 0), 0.06, 0.94);
     const blockProbability = kind === "PENALTY" ? 0 : clamp(0.08 + (abilities(defendingSide).defence - shooting) / 550, 0.03, 0.2);
     const xg = Math.round((1 - blockProbability) * targetProbability * goalGivenTarget * 1000) / 1000;
     const blocked = random() < blockProbability;
@@ -197,12 +260,12 @@ export function simulateMatch(config: MatchConfig): MatchResult {
     if (onTarget) { actorStats.shotsOnTarget++; teamStats[side].shotsOnTarget++; }
     const location = kind === "PENALTY" ? "from the penalty spot" : kind === "FREE_KICK" ? "from the free kick" : progress > 0.78 ? "inside the area" : "from distance";
     emit("SHOT", side, actor, onTarget, `${name(actor)} shoots ${location}${blocked ? " — blocked." : onTarget ? "." : " — wide of the goal."}`,
-      `Finishing ${Math.round(shooting)} vs keeper ${Math.round(keeping)} · ${Math.round(xg * 100)}% estimated goal chance.`, undefined, targetProbability, xg);
+      `Finishing ${Math.round(shooting)} vs keeper ${Math.round(keeping)} · distance ${Math.round(goalDistance)} pitch units · ${Math.round(xg * 100)}% goal chance.`, undefined, targetProbability, xg);
     if (blocked) {
       const blocker = weightedSelect(field(defendingSide), slot => Math.max(5, effective(slot, "defending")), random);
       emit("BLOCK", defendingSide, blocker, true, `${name(blocker)} blocks the shot.`, "The defender gets between the shot and the goal.", actor);
       if (random() < 0.55) ballOut("GOAL_LINE", "DEFENCE", attackingSide, blocker);
-      else turnover(defendingSide, blocker, true);
+      else turnover(defendingSide, blocker);
     } else if (onTarget && random() < goalGivenTarget) {
       actorStats.goals++; teamStats[side].goals++;
       if (side === "HOME") score.home++; else score.away++;
@@ -220,35 +283,46 @@ export function simulateMatch(config: MatchConfig): MatchResult {
   const pass = () => {
     const actor = carrier, attackingSide = side, defendingSide = opponent(side);
     const attack = abilities(side), defence = abilities(defendingSide);
-    const defender = weightedSelect(field(defendingSide), slot => Math.max(5, effective(slot, "defending")), random);
+    const defender = weightedSelect(field(defendingSide), slot => Math.max(5, effective(slot, "defending"))/(6+distance(position(defendingSide,slot),ballPosition())), random);
+    const plan=tactics(side), release=ballPosition(), restart=directRestart;
+    const opponentsAtKick=activeTeam(defendingSide).lineup.map(slot=>position(defendingSide,slot));
     const receiver = weightedSelect(field(side).filter(slot => slot.player.id !== actor.player.id), slot => {
-      const roleWeight = progress > 0.45 ? slot.role === "FWD" ? 2.2 : slot.role === "MID" ? 1.4 : 0.6 : slot.role === "MID" ? 2 : 1;
-      return roleWeight * Math.max(10, attribute(slot.player, "ballControl", "dribbling"));
+      const point=position(side,slot);
+      const advancing=ownX(point.x)>ownX(release.x)+3;
+      const roleWeight=slot.role==="FWD"?1.8:slot.role==="MID"?1.4:0.7;
+      const styleWeight=plan.style==="DIRECT"&&advancing?1.6:plan.style==="POSSESSION"&&!advancing?1.5:1;
+      const intentWeight=advancing?0.6+plan.risk:1.4-plan.risk;
+      const nearestOpponent=Math.min(...field(defendingSide).map(p=>distance(position(defendingSide,p),point)));
+      const space=clamp(nearestOpponent/10,0.5,1.6);
+      const flagged=checkOffside(release,{...point,playerId:slot.player.id},opponentsAtKick,direction(side),restart).offside;
+      const awareness=flagged?clamp(0.02+(100-attribute(actor.player,"vision","passing"))**2/25000,0.02,0.5):1;
+      return roleWeight*styleWeight*intentWeight*space*awareness*Math.max(10,attribute(slot.player,"ballControl","dribbling"))/(10+distance(release,point)*0.25);
     }, random);
     const passing = effective(actor, "passing") * 0.7 + attack.control * 0.3;
     const pressure = effective(defender, "defending") * 0.65 + defence.defence * 0.35;
-    const forward = receiver.role === "FWD" || progress < 0.65;
-    const probability = chance(passing, pressure, forward ? 0.82 - progress * 0.12 : 0.9, 0.25, 0.97);
+    const forward = ownX(position(side,receiver).x)>ownX(release.x)+3;
+    const range=distance(release,position(side,receiver));
+    const probability = chance(passing, pressure, clamp((forward ? 0.83 : 0.91)-Math.max(0,range-20)/280,0.6,0.94), 0.25, 0.97);
     const kick = snapshot();
     const target = { ...kick.players.find(player => player.key === playerKey(side, receiver.player))! };
     const opponents = kick.players.filter(player => player.team === defendingSide);
-    if (receiver.role === "FWD" && forward) {
-      const defensiveLine = opponents.map(player => ownX(player.x)).sort((a,b)=>b-a)[1] ?? 70;
-      const timing = attribute(receiver.player, "positioning", "composure");
-      target.x = worldX(clamp(defensiveLine + random() * 14 - 9 + (80 - timing) / 25, 40, 92));
-    }
     const decision = checkOffside(kick.ball, target, opponents, direction(side), directRestart);
     const offside = decision.offside;
     const success = !offside && random() < probability;
     playerStatsFor(side, actor).passesAttempted++; teamStats[side].passesAttempted++;
-    directRestart = undefined;
+    directRestart = undefined; deliverySpot=undefined;
     if (success) {
       playerStatsFor(side, actor).passesCompleted++; teamStats[side].passesCompleted++;
       carrier = receiver; lastPasser = actor; mustPass = false;
-      progress = receiver.role === "FWD" ? clamp((ownX(target.x) / 100 - 0.12) / 0.78, 0.15, 0.95) : clamp(progress + (forward ? 0.1 + (attack.control - defence.defence) / 600 : -0.08), 0.15, 0.93);
+      updateProgress();
     }
     const passingEvent = emit("PASS", side, actor, success, offside ? `${name(actor)} looks for ${name(receiver)} — the flag goes up.` : success ? `${name(actor)} ${forward ? "plays forward to" : "recycles possession with"} ${name(receiver)}.` : `${name(actor)}'s pass is cut out.`,
       `Passing / control ${Math.round(passing)} vs pressure ${Math.round(pressure)} · ${Math.round(probability * 100)}% completion.`, success ? receiver : undefined, probability);
+    passingEvent.ballMotion={kind:restart==="THROW_IN"?"THROW_IN":"PASS",from:release,to:{x:target.x,y:target.y+2}};
+    if(restart==="THROW_IN") {
+      passingEvent.restart=restart;
+      passingEvent.description=success?`${name(actor)} throws to teammate ${name(receiver)}.`:`${name(actor)}'s throw-in is contested by ${name(defender)}.`;
+    }
     if (forward && receiver.role === "FWD") passingEvent.offside = decision;
     if (offside) {
       teamStats[side].offsides++;
@@ -260,14 +334,16 @@ export function simulateMatch(config: MatchConfig): MatchResult {
     } else if (!success && (receiver.slotId === "LM" || receiver.slotId === "RM") && random() < 0.15) ballOut("TOUCHLINE", "ATTACK", attackingSide, actor);
     else if (!success) {
       playerStatsFor(defendingSide, defender).interceptions++; teamStats[defendingSide].interceptions++;
-      turnover(defendingSide, defender, true);
+      turnover(defendingSide, defender);
       emit("INTERCEPTION", defendingSide, defender, true, `${name(defender)} intercepts and breaks forward.`, "Defensive reading stops the buildup; possession changes.", actor);
     }
   };
   const takeRestart = () => {
     const restart = pending!;
+    restart.ready=true;
+    for(const teamSide of ["HOME","AWAY"] as const) for(const slot of activeTeam(teamSide).lineup) positions.set(playerKey(teamSide,slot.player),restartTarget(teamSide,slot,{...position(teamSide,slot)}));
     const event = emit(restart.type, side, carrier, true,
-      restart.type === "KICKOFF" ? `${teams[side].name} kick off.` : `${name(carrier)} takes the ${restart.type.toLowerCase().replaceAll("_", " ")}.`,
+      restart.type === "THROW_IN" ? `${name(carrier)} is at the touchline, ready to throw to a teammate.` : restart.type === "KICKOFF" ? `${teams[side].name} kick off.` : `${name(carrier)} takes the ${restart.type.toLowerCase().replaceAll("_", " ")}.`,
       restart.type === "FREE_KICK" ? `${restart.indirect ? "Indirect" : "Direct"} free kick. ${restart.indirect ? "Another player must touch the ball before a goal can count." : "A goal can be scored directly."}` : restart.type === "PENALTY" ? "A direct-free-kick offence occurred inside the defending penalty area." : ["CORNER", "THROW_IN", "GOAL_KICK"].includes(restart.type) ? "No offside offence from receiving this restart directly." : "The ball is placed on the centre spot; opponents start in their own half.");
     event.restart = restart.type;
     pending = undefined;
@@ -275,7 +351,7 @@ export function simulateMatch(config: MatchConfig): MatchResult {
     else if (restart.type === "FREE_KICK" && !restart.indirect && progress > 0.7 && random() < 0.35) { lastPasser = undefined; shoot("FREE_KICK"); }
     else {
       mustPass = true;
-      directRestart = restart.type;
+      directRestart = restart.type; deliverySpot={...restart.spot};
       if (restart.type === "KICKOFF") progress = 0.35;
     }
   };
@@ -302,20 +378,32 @@ export function simulateMatch(config: MatchConfig): MatchResult {
         halfTimeMinute = minute;
         emit("HALF_TIME", side, carrier, true, "Half time. The teams change ends.", "The team that did not take the opening kickoff starts the second half.");
         period = 2; periodEnd = minute + regulation / 2; addedAnnounced = false; lostSeconds = 0;
+        resetShape();
         queueRestart("KICKOFF", opponent(startingSide), { x: 50, y: 50 });
+        takeRestart();
         continue;
       }
       emit("FULL_TIME", side, carrier, true, "Full time. The final whistle blows.", "The final score includes both halves and added time.");
       break;
     }
-    const step = pending ? 0.15 + random() * 0.15 : 0.35 + random() * 0.45;
+    const setupTime=pending?0.5+distance(position(side,carrier),pending.spot)/((3.5+attribute(carrier.player,"pace","physical")/13)*(0.55+energy(carrier)/220)):0;
+    // At 1×, an ordinary action has roughly one second of visible movement.
+    // Fast/direct teams play quicker; leading possession teams take more time.
+    const step = pending ? Math.max(0.75,setupTime) : (1.05+random()*0.35)/tactics(side).tempo;
     const elapsed = Math.min(step, periodEnd - minute);
-    if (pending) lostSeconds += elapsed * 60; else possessionTime[side] += elapsed;
+    // Ordinary dead-ball time is part of the match clock. Add an allowance
+    // for the modelled restart delay, rather than every second of animation.
+    if (pending) {
+      const allowance=pending.type==="THROW_IN"?6:pending.type==="GOAL_KICK"?12:pending.type==="KICKOFF"?25:pending.type==="PENALTY"?30:18;
+      lostSeconds += Math.min(elapsed*60,allowance);
+    } else possessionTime[side] += elapsed;
     minute += elapsed;
+    movePlayers(elapsed);
+    if(elapsed<step-0.00001) continue;
     if (pending) { takeRestart(); continue; }
     const actor = carrier, attackingSide = side, defendingSide = opponent(side);
     const attack = abilities(side), defence = abilities(defendingSide);
-    const defender = weightedSelect(field(defendingSide), slot => Math.max(5, effective(slot, "defending")) * (slot.role === "DEF" ? 1.6 : 1), random);
+    const defender = weightedSelect(field(defendingSide), slot => Math.max(5, effective(slot, "defending")) * (slot.role === "DEF" ? 1.6 : 1)/(6+distance(position(defendingSide,slot),ballPosition())), random);
     const actorStats = playerStatsFor(side, actor), defenderStats = playerStatsFor(defendingSide, defender);
     const aggression = attribute(defender.player, "aggression", "physical");
     const foulProbability = clamp(0.018 + (aggression - 50) / 2500 + (80 - effective(defender, "defending")) / 3000 + (100 - energy(defender)) / 2500, 0.008, 0.065);
@@ -352,7 +440,7 @@ export function simulateMatch(config: MatchConfig): MatchResult {
         continue;
       }
     }
-    const shotWeight = mustPass || actor.role === "GK" || progress < 0.52 ? 0 : clamp((progress - 0.48) * (actor.role === "FWD" ? 1.25 : 0.85) + (effective(actor, "shooting") - 60) / 500, 0.02, 0.65);
+    const shotWeight = mustPass || actor.role === "GK" || progress < 0.52 ? 0 : clamp(0.08+(progress - 0.48) * (actor.role === "FWD" ? 1.55 : 0.95) + (effective(actor, "shooting") - 60) / 500 + (tactics(side).risk-0.5)*0.16, 0.02, 0.65);
     const dribbleWeight = mustPass || actor.role === "GK" ? 0 : clamp(0.12 + (effective(actor, "dribbling") - effective(actor, "passing")) / 250 + (progress > 0.5 ? 0.08 : 0), 0.05, 0.32);
     const roll = random();
     if (roll < shotWeight) shoot();
@@ -362,10 +450,10 @@ export function simulateMatch(config: MatchConfig): MatchResult {
       const probability = chance(attackingSkill, defendingSkill, 0.62 - progress * 0.1, 0.12, 0.92);
       const success = random() < probability;
       actorStats.dribblesAttempted++; teamStats[side].dribblesAttempted++;
-      if (success) { actorStats.dribblesCompleted++; teamStats[side].dribblesCompleted++; progress = Math.min(0.95, progress + 0.12 + attribute(actor.player, "pace", "pace") / 800); }
+      if (success) { actorStats.dribblesCompleted++; teamStats[side].dribblesCompleted++; const point=position(side,actor); point.x=worldX(clamp(ownX(point.x)+5+attribute(actor.player,"pace","pace")/20,8,94)); updateProgress(); }
       emit("DRIBBLE", side, actor, success, `${name(actor)} ${success ? "drives past" : "is stopped by"} ${name(defender)}.`,
         `Dribbling / pace ${Math.round(attackingSkill)} vs pressure ${Math.round(defendingSkill)} · ${Math.round(probability * 100)}% success.`, defender, probability);
-      if (!success) { defenderStats.interceptions++; teamStats[defendingSide].interceptions++; turnover(defendingSide, defender, true); emit("INTERCEPTION", defendingSide, defender, true, `${name(defender)} wins the duel and starts a counter.`, "The failed dribble turns possession over.", actor); }
+      if (!success) { defenderStats.interceptions++; teamStats[defendingSide].interceptions++; turnover(defendingSide, defender); emit("INTERCEPTION", defendingSide, defender, true, `${name(defender)} wins the duel and starts a counter.`, "The failed dribble turns possession over.", actor); }
     } else pass();
     if (attackingSide !== side) lastPasser = undefined;
   }

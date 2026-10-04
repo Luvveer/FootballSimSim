@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePlayers } from "./players.js";
+import { parsePlayers, PlayerRepository } from "./players.js";
 
 const header = "player_id,fifa_version,fifa_update,update_as_of,short_name,long_name,player_positions,overall,club_name,nationality_name";
 
@@ -20,5 +20,11 @@ describe("player data", () => {
     ].join("\n"));
     expect(players).toHaveLength(2);
     expect(players.find((player) => player.fifa_version === "20")?.long_name).toBe("Newest");
+  });
+
+  it("groups one player's FIFA versions in chronological order", async () => {
+    const repository = await PlayerRepository.load(new URL("../../test/players.csv", import.meta.url).pathname);
+    expect(repository.versionsFor("1").map((player) => player.fifa_version)).toEqual(["19", "20"]);
+    expect(repository.versionsFor("missing")).toEqual([]);
   });
 });

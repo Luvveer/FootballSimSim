@@ -26,6 +26,12 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
 
   app.get("/players/versions", async () => ({ versions: repository.versions() }));
 
+  app.get<{ Params: { playerId: string } }>("/players/:playerId/versions", async (request, reply) => {
+    const players = repository.versionsFor(request.params.playerId);
+    if (players.length === 0) return reply.code(404).send({ error: "Player not found" });
+    return { players };
+  });
+
   app.get<{ Querystring: { q?: string; version?: string; position?: string; limit?: string; offset?: string } }>(
     "/players",
     async (request) => repository.search({

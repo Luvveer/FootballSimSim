@@ -74,12 +74,19 @@ export function defaultCsvPath(): string {
 
 export class PlayerRepository {
   private readonly byHistoricalId = new Map<string, PlayerRecord>();
+  private readonly byPlayerId = new Map<string, PlayerRecord[]>();
   private readonly searchIndex: Array<{ record: PlayerRecord; text: string; positions: Set<string> }>;
   private readonly availableVersions: string[];
 
   private constructor(private readonly records: PlayerRecord[]) {
     for (const record of records) {
       this.byHistoricalId.set(`${record.player_id}\u0000${record.fifa_version}`, record);
+      const versions = this.byPlayerId.get(record.player_id) ?? [];
+      versions.push(record);
+      this.byPlayerId.set(record.player_id, versions);
+    }
+    for (const versions of this.byPlayerId.values()) {
+      versions.sort((a, b) => numeric(a.fifa_version) - numeric(b.fifa_version));
     }
     this.searchIndex = records.map((record) => ({
       record,
@@ -106,6 +113,10 @@ export class PlayerRepository {
 
   find(playerId: string, fifaVersion: string): PlayerRecord | undefined {
     return this.byHistoricalId.get(`${playerId}\u0000${fifaVersion}`);
+  }
+
+  versionsFor(playerId: string): readonly PlayerRecord[] {
+    return this.byPlayerId.get(playerId) ?? [];
   }
 
   search({ query = "", version, position, limit = 30, offset = 0 }: PlayerSearch): PlayerPage {

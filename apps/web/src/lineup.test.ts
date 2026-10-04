@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { FORMATIONS } from "./formations";
 import type { Player } from "./types";
 import {
   assignPlayer,
   emptyLineup,
+  firstAvailableSlot,
   isLineupComplete,
   lineupFilledCount,
   lineupHasPlayer,
+  remapLineup,
   resolveActiveSlot,
   visibleLineup,
 } from "./lineup";
@@ -66,5 +69,47 @@ describe("formation-scoped lineup state", () => {
 
     expect(lineupFilledCount(lineup, "1-2-1")).toBe(5);
     expect(isLineupComplete(lineup, "1-2-1")).toBe(true);
+  });
+
+  it("preserves all players across every formation transition", () => {
+    for (const sourceFormation of Object.keys(FORMATIONS)) {
+      for (const targetFormation of Object.keys(FORMATIONS)) {
+        const lineup = emptyLineup(sourceFormation);
+        for (const slot of FORMATIONS[sourceFormation]!) lineup[slot.id] = player(`${sourceFormation}-${slot.id}:20`);
+        const expectedPlayers = Object.values(lineup).map(item => item!.id).sort();
+
+        const remapped = remapLineup(lineup, sourceFormation, targetFormation);
+
+        expect(Object.keys(remapped)).toEqual(FORMATIONS[targetFormation]!.map(slot => slot.id));
+        expect(Object.values(remapped).map(item => item!.id).sort()).toEqual(expectedPlayers);
+        expect(new Set(Object.values(remapped).map(item => item!.id)).size).toBe(5);
+        expect(remapped.GK?.id).toBe(lineup.GK?.id);
+      }
+    }
+  });
+
+  it("keeps exact slots before preferring a matching role", () => {
+    const lineup = emptyLineup("1-2-1");
+    lineup.ST = player("striker:20");
+    lineup.LM = player("midfielder:20");
+
+    const remapped = remapLineup(lineup, "1-2-1", "2-1-1");
+
+    expect(remapped.ST?.id).toBe("striker:20");
+    expect(remapped.CM?.id).toBe("midfielder:20");
+  });
+
+  it("preserves partial selections while discarding hidden properties", () => {
+    const lineup = emptyLineup("1-2-1");
+    lineup.LM = player("midfielder:20");
+    lineup.GK = player("keeper:20");
+    lineup.HIDDEN = player("ghost:20");
+
+    const remapped = remapLineup(lineup, "1-2-1", "2-0-2");
+
+    expect(lineupFilledCount(remapped, "2-0-2")).toBe(2);
+    expect(Object.values(remapped).filter(Boolean).map(item => item!.id).sort()).toEqual(["keeper:20", "midfielder:20"]);
+    expect(remapped).not.toHaveProperty("HIDDEN");
+    expect(firstAvailableSlot("2-0-2", remapped)).toBe("RST");
   });
 });

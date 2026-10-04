@@ -6,7 +6,7 @@ import { MatchReplay } from './MatchReplay'
 import { PlayerComparison } from './PlayerComparison'
 import { Results } from './Results'
 import { DEFAULT_FORMATION, FORMATIONS, roleLabel, slotLabel } from './formations'
-import { assignPlayer, emptyLineup, isLineupComplete, lineupFilledCount, lineupHasPlayer, resolveActiveSlot } from './lineup'
+import { assignPlayer, emptyLineup, firstAvailableSlot, isLineupComplete, lineupFilledCount, lineupHasPlayer, remapLineup, resolveActiveSlot } from './lineup'
 import type { Lineup, MatchResult, Player, Side, Slot } from './types'
 
 export function App() {
@@ -105,11 +105,11 @@ export function App() {
 
   const changeFormation = (side: Side, formation: string) => {
     const lineup = side === 'home' ? home : away
-    const next = emptyLineup(formation)
-    for (const id of Object.keys(next)) next[id] = lineup[id] ?? null
+    const previousFormation = side === 'home' ? homeFormation : awayFormation
+    const next = remapLineup(lineup, previousFormation, formation)
     if (side === 'home') { setHomeFormation(formation); setHome(next) } else { setAwayFormation(formation); setAway(next) }
     setActiveSide(side)
-    setActiveSlot(FORMATIONS[formation].find(slot => !next[slot.id])?.id ?? FORMATIONS[formation][0].id)
+    setActiveSlot(firstAvailableSlot(formation, next))
   }
 
   const start = async () => {

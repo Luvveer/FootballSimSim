@@ -250,6 +250,7 @@ describe("attribute-driven match model", () => {
       expect(event.snapshot.teamStats.HOME.possession + event.snapshot.teamStats.AWAY.possession).toBe(100);
       expect(event.snapshot.teamStats.HOME.goals).toBe(event.score.home);
       expect(event.snapshot.teamStats.AWAY.goals).toBe(event.score.away);
+      if (event.snapshot.carrierKey) expect(event.snapshot.carrierKey).toMatch(new RegExp(`^${event.snapshot.possession}:`));
       for (const point of [event.snapshot.ball, ...event.snapshot.players]) {
         expect(point.x).toBeGreaterThanOrEqual(0); expect(point.x).toBeLessThanOrEqual(100);
         expect(point.y).toBeGreaterThanOrEqual(0); expect(point.y).toBeLessThanOrEqual(100);
@@ -261,6 +262,9 @@ describe("attribute-driven match model", () => {
       expect(shots.length).toBe(result.teamStats[side].shots);
       expect(result.events.at(-1)!.snapshot.teamStats[side].shots).toBe(result.teamStats[side].shots);
     }
+    const saves = result.events.filter(event => event.type === "SAVE");
+    expect(saves.length).toBeGreaterThan(0);
+    for (const save of saves) expect(save.snapshot.carrierKey).toBe(`${save.team}:${save.playerId}`);
   });
 });
 

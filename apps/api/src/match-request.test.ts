@@ -22,6 +22,10 @@ function record(overrides: Partial<PlayerRecord> = {}): PlayerRecord {
 }
 
 describe("historical player attribute conversion", () => {
+  it("normalizes every listed position into canonical roles", () => {
+    expect(toHistoricalPlayer(record({ player_positions: "LM, LW, CAM" })).positions).toEqual(["MID", "FWD"]);
+  });
+
   it("preserves missing and invalid optional attributes as undefined", () => {
     const player = toHistoricalPlayer(record({
       mentality_composure: "",

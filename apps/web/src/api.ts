@@ -1,5 +1,5 @@
-import type { MatchResult as EngineMatchResult, MatchEventType, TeamMatchStats } from '@footballsimsim/shared'
-import { FORMATIONS, positionGroup } from './formations'
+import { normalizePositions, type MatchResult as EngineMatchResult, type MatchEventType, type PitchRole, type TeamMatchStats } from '@footballsimsim/shared'
+import { FORMATIONS } from './formations'
 import type { Lineup, MatchEvent, MatchResult, Player } from './types'
 
 const mapGk = (raw: Record<string, unknown>): Player['gk'] => {
@@ -8,23 +8,30 @@ const mapGk = (raw: Record<string, unknown>): Player['gk'] => {
   return Object.values(gk).every(Number.isFinite) ? gk : undefined
 }
 
-const mapPlayer = (raw: Record<string, unknown>, index: number): Player => ({
-  id: String(raw.id ?? raw.playerId ?? raw.player_id ?? `${raw.name ?? raw.short_name}-${raw.version ?? raw.fifaVersion ?? index}`),
-  name: String(raw.name ?? raw.short_name ?? 'Unknown player'),
-  fullName: String(raw.fullName ?? raw.longName ?? raw.long_name ?? '') || undefined,
-  version: String(raw.version ?? raw.fifaVersion ?? raw.fifa_version ?? 'FIFA'),
-  rating: Number(raw.rating ?? raw.overall ?? 0),
-  position: String(raw.position ?? (Array.isArray(raw.positions) ? raw.positions[0] : undefined) ?? raw.playerPositions ?? raw.player_positions ?? '—').split(',').map(positionGroup)[0],
-  club: String(raw.club ?? raw.clubName ?? raw.club_name ?? 'Free agent'),
-  nationality: String(raw.nationality ?? raw.nationalityName ?? raw.nationality_name ?? 'Unknown'),
-  pace: Number(raw.pace ?? raw.pac ?? (raw.attributes as Record<string,unknown>)?.pace ?? 0),
-  shooting: Number(raw.shooting ?? raw.sho ?? (raw.attributes as Record<string,unknown>)?.shooting ?? 0),
-  passing: Number(raw.passing ?? raw.pas ?? (raw.attributes as Record<string,unknown>)?.passing ?? 0),
-  dribbling: Number(raw.dribbling ?? raw.dri ?? (raw.attributes as Record<string,unknown>)?.dribbling ?? 0),
-  defending: Number(raw.defending ?? raw.def ?? (raw.attributes as Record<string,unknown>)?.defending ?? 0),
-  physical: Number(raw.physical ?? raw.phy ?? raw.physic ?? (raw.attributes as Record<string,unknown>)?.physical ?? 0), image: typeof raw.image === 'string' ? raw.image : undefined,
-  gk: mapGk(raw),
-})
+const mapPlayer = (raw: Record<string, unknown>, index: number): Player => {
+  const sourcePositions = Array.isArray(raw.positions)
+    ? raw.positions.map(String)
+    : String(raw.position ?? raw.playerPositions ?? raw.player_positions ?? '')
+  const position = normalizePositions(sourcePositions)[0]
+  if (!position) throw new Error('The player response contains an unsupported position.')
+  return {
+    id: String(raw.id ?? raw.playerId ?? raw.player_id ?? `${raw.name ?? raw.short_name}-${raw.version ?? raw.fifaVersion ?? index}`),
+    name: String(raw.name ?? raw.short_name ?? 'Unknown player'),
+    fullName: String(raw.fullName ?? raw.longName ?? raw.long_name ?? '') || undefined,
+    version: String(raw.version ?? raw.fifaVersion ?? raw.fifa_version ?? 'FIFA'),
+    rating: Number(raw.rating ?? raw.overall ?? 0),
+    position,
+    club: String(raw.club ?? raw.clubName ?? raw.club_name ?? 'Free agent'),
+    nationality: String(raw.nationality ?? raw.nationalityName ?? raw.nationality_name ?? 'Unknown'),
+    pace: Number(raw.pace ?? raw.pac ?? (raw.attributes as Record<string,unknown>)?.pace ?? 0),
+    shooting: Number(raw.shooting ?? raw.sho ?? (raw.attributes as Record<string,unknown>)?.shooting ?? 0),
+    passing: Number(raw.passing ?? raw.pas ?? (raw.attributes as Record<string,unknown>)?.passing ?? 0),
+    dribbling: Number(raw.dribbling ?? raw.dri ?? (raw.attributes as Record<string,unknown>)?.dribbling ?? 0),
+    defending: Number(raw.defending ?? raw.def ?? (raw.attributes as Record<string,unknown>)?.defending ?? 0),
+    physical: Number(raw.physical ?? raw.phy ?? raw.physic ?? (raw.attributes as Record<string,unknown>)?.physical ?? 0), image: typeof raw.image === 'string' ? raw.image : undefined,
+    gk: mapGk(raw),
+  }
+}
 
 export interface PlayerPage {
   players: Player[]
@@ -41,7 +48,7 @@ export async function fetchPlayerVersions(playerId: string, signal?: AbortSignal
   return body.players.map(mapPlayer)
 }
 
-export async function fetchPlayers(query = '', position = 'ALL', offset = 0, signal?: AbortSignal): Promise<PlayerPage> {
+export async function fetchPlayers(query = '', position: PitchRole | 'ALL' = 'ALL', offset = 0, signal?: AbortSignal): Promise<PlayerPage> {
   const params = new URLSearchParams({ limit: '40', offset: String(offset) })
   if (query.trim()) params.set('q', query.trim())
   if (position !== 'ALL') params.set('position', position)

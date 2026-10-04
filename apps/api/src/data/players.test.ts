@@ -3,11 +3,20 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { normalizePositions } from "@footballsimsim/shared";
 import { PlayerRepository, parsePlayers } from "./players.js";
 
 const header = "player_id,fifa_version,fifa_update,update_as_of,short_name,long_name,player_positions,overall,club_name,nationality_name";
 
 describe("player data", () => {
+  it("normalizes exact FIFA positions into canonical roles", () => {
+    expect(normalizePositions("GK, CB, LB, RB, LWB, RWB, CDM, CM, CAM, LM, RM, ST, CF, LW, RW"))
+      .toEqual(["GK", "DEF", "MID", "FWD"]);
+    expect(normalizePositions("  lm, LW, LM ")).toEqual(["MID", "FWD"]);
+    expect(normalizePositions(["MID", "FWD"])).toEqual(["MID", "FWD"]);
+    expect(normalizePositions("unknown")).toEqual([]);
+  });
+
   it("preserves source columns and quoted commas", () => {
     const [player] = parsePlayers(`${header}\n1,20,1,2020-01-01,A,Alpha,\"GK, CB\",80,Club,Country\n`);
     expect(player).toMatchObject({ player_id: "1", player_positions: "GK, CB", overall: "80" });
@@ -42,11 +51,15 @@ it("searches accents, combined terms, clubs and FIFA years across pages", async 
       '1,24.0,1,2023-01-01,K. Mbappé,Kylian Mbappé,"ST, LW",91,Paris,France',
       '1,23.0,1,2022-01-01,K. Mbappé,Kylian Mbappé,ST,90,Paris,France',
       '2,24.0,1,2023-01-01,B,Beta,GK,80,London,England',
+      '3,24.0,1,2023-01-01,C,Charlie,"CDM, CB",80,Rome,Italy',
     ].join("\n"));
     const repository = await PlayerRepository.load(file);
     expect(repository.search({ query: "Mbappe" }).total).toBe(2);
     expect(repository.search({ query: "  MBAPPE  FIFA 24 " }).total).toBe(1);
-    expect(repository.search({ query: "2024", position: "LW" }).total).toBe(1);
+    expect(repository.search({ query: "2024", position: "FWD" }).total).toBe(1);
+    expect(repository.search({ query: "Charlie", position: "MID" }).total).toBe(1);
+    expect(repository.search({ query: "Charlie", position: "DEF" }).total).toBe(1);
+    expect(repository.search({ query: "Charlie", position: "CDM" }).total).toBe(0);
     expect(repository.search({ query: "Paris Mbappe", limit: 1, offset: 1 })).toMatchObject({ total: 2, players: [{ fifa_version: "23.0" }] });
     expect(repository.search({ query: "missing" }).total).toBe(0);
   } finally {

@@ -122,7 +122,7 @@ A user will be able to:
 
 1. Search for a real player.
 2. Choose a specific FIFA version of that player.
-3. Inspect a player card with the version, club, nationality, positions, overall rating, and headline attributes.
+3. Inspect a player card with the version, club, nationality, normalized role, overall rating, and headline attributes.
 4. Compare two FIFA versions of the same player using exact attribute changes and a radar chart.
 5. Place five historical player versions into a lineup.
 6. Build or select an opposing lineup.
@@ -156,7 +156,8 @@ These are working recommendations, not settled product decisions:
 - The hackathon demo will be a desktop-first responsive web app, not a native mobile app.
 - Each lineup will have five starters, including one goalkeeper, and no substitutes in the first release.
 - The first supported shape will be 1-2-1, with one goalkeeper behind four outfield players. The lineup screen will show those positions on a small-sided pitch.
-- Position selection will be flexible. Any player can occupy any slot, with no hard validation based on their listed FIFA positions.
+- Source positions are normalized to `GK`, `DEF`, `MID`, or `FWD`. Multi-position players may belong to more than one normalized role.
+- Position selection will be flexible. Any player can occupy any slot, with no hard validation based on their normalized roles.
 - A simulated match will cover 90 minutes without extra time, penalties, injuries, or substitutions.
 - The live presentation will replay a completed simulation event by event. The backend will calculate the full result first, and the frontend will reveal it on a compressed clock.
 - Team tactics will be omitted or limited to one small set of modifiers in the first version.

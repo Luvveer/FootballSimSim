@@ -40,11 +40,7 @@ function skill(slot: LineupSlot, kind: "passing" | "dribbling" | "defending" | "
     shooting: [a("shooting"), a("finishing", "shooting"), a("composure", "shooting")],
     keeping: [a("goalkeeperDiving", "reactions"), a("goalkeeperHandling", "reactions"), a("goalkeeperPositioning", "reactions"), a("goalkeeperReflexes", "reactions")],
   };
-  const position = slot.player.positions;
-  const compatible = slot.role === "GK" ? position.includes("GK") : slot.role === "FWD"
-    ? position.some(p => ["ST", "CF", "LW", "RW", "FWD"].includes(p)) : slot.role === "DEF"
-    ? position.some(p => ["CB", "LB", "RB", "LWB", "RWB", "CDM", "DEF"].includes(p))
-    : position.some(p => ["LM", "RM", "CM", "CAM", "CDM", "LW", "RW", "MID"].includes(p));
+  const compatible = slot.player.positions.includes(slot.role);
   return average(values[kind]) * (compatible ? 1 : 0.9);
 }
 function profile(team: Team): TeamProfile {

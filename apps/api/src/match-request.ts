@@ -1,5 +1,5 @@
 import type { HistoricalPlayer, MatchConfig, PitchRole, Team } from "@footballsimsim/shared";
-import { TEAM_SIZE } from "@footballsimsim/shared";
+import { isPitchRole, normalizePositions, TEAM_SIZE } from "@footballsimsim/shared";
 import type { PlayerRecord, PlayerRepository } from "./data/players.js";
 
 interface LineupSelection {
@@ -49,7 +49,7 @@ export function toHistoricalPlayer(record: PlayerRecord): HistoricalPlayer {
     fifaUpdate: record.fifa_update,
     name: record.long_name || record.short_name,
     shortName: record.short_name,
-    positions: record.player_positions.split(",").map((position) => position.trim()).filter(Boolean),
+    positions: normalizePositions(record.player_positions),
     overall: requiredNumber(record, "overall"),
     club: record.club_name || undefined,
     nationality: record.nationality_name || undefined,
@@ -93,7 +93,7 @@ function requiredString(value: unknown, path: string, issues: string[]): string 
 
 function pitchRole(value: unknown, path: string, issues: string[]): PitchRole {
   const role = requiredString(value, path, issues).toUpperCase();
-  if (!(["GK", "DEF", "MID", "FWD"] as const).includes(role as PitchRole)) {
+  if (!isPitchRole(role)) {
     issues.push(`${path} must be GK, DEF, MID, or FWD`);
   }
   return role as PitchRole;

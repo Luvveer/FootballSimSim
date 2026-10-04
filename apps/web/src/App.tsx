@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { PITCH_ROLES, type PitchRole } from '@footballsimsim/shared'
 import { Check, ChevronLeft, ChevronRight, CircleDot, Gauge, GitCompareArrows, Pencil, Play, Search, Shield, Sparkles, X } from 'lucide-react'
 import { fetchPlayers, simulateMatch } from './api'
 import { MatchReplay } from './MatchReplay'
@@ -21,7 +22,7 @@ export function App() {
   const [activeSide, setActiveSide] = useState<Side>('home')
   const [activeSlot, setActiveSlot] = useState<Slot>('ST')
   const [query, setQuery] = useState('')
-  const [position, setPosition] = useState('ALL')
+  const [position, setPosition] = useState<PitchRole|'ALL'>('ALL')
   const [result, setResult] = useState<MatchResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [playersLoading, setPlayersLoading] = useState(true)
@@ -172,11 +173,11 @@ function Pitch({ side,formation,onFormation,lineup,activeSlot,onSlot,onRemove,on
   </div>
 }
 
-function PlayerBrowser({activeName,searching,players,total,loadingMore,onLoadMore,query,setQuery,position,setPosition,activeSlot,lineup,onSelect,onCompare}:{activeName:string;searching:boolean;players:Player[];total:number;loadingMore:boolean;onLoadMore:()=>void;query:string;setQuery:(q:string)=>void;position:string;setPosition:(position:string)=>void;activeSlot:Slot;lineup:Lineup;onSelect:(p:Player)=>void;onCompare:(p:Player)=>void}) {
+function PlayerBrowser({activeName,searching,players,total,loadingMore,onLoadMore,query,setQuery,position,setPosition,activeSlot,lineup,onSelect,onCompare}:{activeName:string;searching:boolean;players:Player[];total:number;loadingMore:boolean;onLoadMore:()=>void;query:string;setQuery:(q:string)=>void;position:PitchRole|'ALL';setPosition:(position:PitchRole|'ALL')=>void;activeSlot:Slot;lineup:Lineup;onSelect:(p:Player)=>void;onCompare:(p:Player)=>void}) {
   return <section className="player-browser" aria-label="Player selection">
     <div className="browser-title"><div><p className="eyebrow">Player library</p><h2>Choose for <span>{activeName} · {slotLabel(activeSlot)}</span></h2></div><span className="count">{searching ? 'Searching…' : `${players.length.toLocaleString()} of ${total.toLocaleString()}`}</span></div>
     <label className="search-box"><Search size={18}/><span className="sr-only">Search players</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search player, club, or year…"/></label>
-    <div className="filter-row" role="group" aria-label="Filter by position">{['ALL','GK','DEF','MID','ATT'].map(p=><button className={position===p?'active':''} onClick={()=>setPosition(p)} key={p}>{p}</button>)}</div>
+    <div className="filter-row" role="group" aria-label="Filter by position">{(['ALL',...PITCH_ROLES] as const).map(p=><button className={position===p?'active':''} onClick={()=>setPosition(p)} key={p}>{p}</button>)}</div>
     <div className="player-list" aria-busy={searching}>{searching ? <div className="empty-search" role="status">Searching players…</div> : players.length ? players.map(player => { const used=Object.values(lineup).some(p=>p?.id===player.id); return <article className={`player-card ${used?'used':''}`} key={`${player.id}:${player.version}`}>
       <button className="player-card-main" title={player.fullName??player.name} disabled={used} onClick={()=>onSelect(player)} aria-label={`${used?'Already selected':'Add'} ${player.fullName??player.name}, ${formatVersion(player.version)}`}><span className="card-rating"><b>{player.rating}</b><small>{player.position}</small></span><span className="card-avatar">{initials(player.name)}</span><span className="card-identity"><b>{player.name}</b><small>{player.club} · {player.nationality}</small><span>{formatVersion(player.version)}</span></span><span className="mini-stats">{player.position==='GK'&&player.gk ? <><small><b>{player.gk.diving}</b>DIV</small><small><b>{player.gk.reflexes}</b>REF</small><small><b>{player.gk.handling}</b>HAN</small><small><b>{player.gk.speed}</b>SPE</small><small><b>{player.gk.kicking}</b>KIC</small><small><b>{player.gk.positioning}</b>POS</small></> : <><small><b>{player.pace}</b>PAC</small><small><b>{player.shooting}</b>SHO</small><small><b>{player.passing}</b>PAS</small><small><b>{player.dribbling}</b>DRI</small><small><b>{player.defending}</b>DEF</small><small><b>{player.physical}</b>PHY</small></>}</span><span className="add-player">{used?<Check size={16}/>:<span>+</span>}</span></button><button className="compare-player" onClick={()=>onCompare(player)} aria-label={`Compare FIFA versions of ${player.name}`} title="Compare FIFA versions"><GitCompareArrows size={16}/></button>
     </article>}) : <div className="empty-search"><Search size={26}/><b>No players found</b><span>Try a name, club, or a different position.</span></div>}{!searching && players.length < total && <button className="load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? 'Loading…' : `Load more (${total-players.length} remaining)`}</button>}</div>

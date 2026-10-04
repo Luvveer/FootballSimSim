@@ -1,4 +1,6 @@
-export type SlotRole = 'GK' | 'DEF' | 'MID' | 'FWD'
+import type { PitchRole } from '@footballsimsim/shared'
+
+export type SlotRole = PitchRole
 export type SlotDef = { id: string; role: SlotRole; left: number; top: number }
 
 const gk: SlotDef = { id: 'GK', role: 'GK', left: 50, top: 86 }
@@ -43,17 +45,8 @@ export const FORMATIONS: Record<string, SlotDef[]> = {
 
 export const DEFAULT_FORMATION = '1-2-1'
 
-const ROLE_LABELS: Record<SlotRole, string> = { GK: 'GK', DEF: 'DEF', MID: 'MID', FWD: 'ATT' }
+const ROLE_LABELS: Record<SlotRole, string> = { GK: 'GK', DEF: 'DEF', MID: 'MID', FWD: 'FWD' }
 const SLOT_ROLES = new Map(Object.values(FORMATIONS).flat().map(slot => [slot.id, slot.role]))
 
 export const roleLabel = (role: SlotRole) => ROLE_LABELS[role]
 export const slotLabel = (slotId: string) => ROLE_LABELS[SLOT_ROLES.get(slotId) ?? 'MID']
-
-const POSITION_GROUPS: Record<string, string> = {
-  GK: 'GK',
-  CB: 'DEF', LB: 'DEF', RB: 'DEF', LWB: 'DEF', RWB: 'DEF', SW: 'DEF',
-  CDM: 'MID', CM: 'MID', CAM: 'MID', LM: 'MID', RM: 'MID',
-  ST: 'ATT', CF: 'ATT', LW: 'ATT', RW: 'ATT', LF: 'ATT', RF: 'ATT', SS: 'ATT',
-}
-export const positionGroup = (position: string) => POSITION_GROUPS[position.trim().toUpperCase()] ?? position
-

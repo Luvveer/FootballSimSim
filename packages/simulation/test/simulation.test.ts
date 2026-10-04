@@ -34,6 +34,66 @@ const config = (seed: string): MatchConfig => ({
   homeTeam: team("home", true), awayTeam: team("away", true), seed, durationMinutes: 60,
 });
 
+describe("football match lifecycle", () => {
+  it("plays two halves with opposite kickoff teams, switched ends and added time", () => {
+    const result = simulateMatch(config("rules-halves"));
+    const half = result.events.find(e=>e.type==="HALF_TIME")!;
+    const index = result.events.indexOf(half);
+    const opening = result.events[0]!;
+    const second = result.events[index+1]!;
+    expect(opening.type).toBe("KICKOFF");
+    expect(second.type).toBe("KICKOFF");
+    expect(second.team).not.toBe(opening.team);
+    expect(half.minute).toBe(result.halfTimeMinute);
+    expect(half.snapshot.status).toBe("HALF_TIME");
+    expect(opening.snapshot.direction.HOME).toBe(1);
+    expect(second.snapshot.direction.HOME).toBe(-1);
+    expect(second.snapshot.period).toBe(2);
+    expect(result.events.at(-1)!.type).toBe("FULL_TIME");
+    expect(result.durationMinutes).toBe(60+result.addedTime.firstHalf+result.addedTime.secondHalf);
+  });
+
+  it("awards defending indirect free kicks for offside and tracks discipline without retaining sent-off players", () => {
+    let offsides = 0, reds = 0, penalties = 0, corners = 0;
+    for (let seed=0;seed<150;seed++) {
+      const result=simulateMatch(config(`rule-lifecycle-${seed}`));
+      const dismissed = new Set<string>();
+      for (const [index,event] of result.events.entries()) {
+        if (event.type==="OFFSIDE") {
+          offsides++;
+          expect(event.offside?.offside).toBe(true);
+          const next=result.events[index+1];
+          if (next?.type==="FREE_KICK") {
+            expect(next.team).not.toBe(event.team);
+            expect(next.explanation).toContain("Indirect");
+            const nextPlay=result.events.slice(index+2).find(e=>["PASS","SHOT","HALF_TIME","FULL_TIME"].includes(e.type));
+            expect(nextPlay?.type).not.toBe("SHOT");
+          }
+        }
+        if (event.type==="RED_CARD") { reds++; dismissed.add(`${event.team}:${event.playerId}`); }
+        for (const p of event.snapshot.players) expect(dismissed.has(p.key)).toBe(false);
+        if (event.type==="PENALTY") {
+          penalties++;
+          expect(event.snapshot.ball.y).toBe(50);
+          expect(event.snapshot.ball.x).toBe(event.snapshot.direction[event.team]===1?89:11);
+          expect(result.events[index+1]?.type).toBe("SHOT");
+        }
+        if(event.type==="CORNER") corners++;
+      }
+      for (const side of ["HOME","AWAY"] as const) {
+        for (const [type,key] of [["FOUL","fouls"],["OFFSIDE","offsides"],["CORNER","corners"],["YELLOW_CARD","yellowCards"],["RED_CARD","redCards"]] as const) {
+          // A corner awarded at the whistle may remain untaken.
+          const count=result.events.filter(e=>e.team===side&&e.type===type).length;
+          if(type==="CORNER") expect(result.teamStats[side][key]).toBeGreaterThanOrEqual(count);
+          else expect(result.teamStats[side][key]).toBe(count);
+        }
+      }
+    }
+    expect(offsides).toBeGreaterThan(0); expect(reds).toBeGreaterThan(0);
+    expect(penalties).toBeGreaterThan(0); expect(corners).toBeGreaterThan(0);
+  });
+});
+
 describe("simulateMatch", () => {
   it("is fully deterministic for a given seed", () => {
     expect(simulateMatch(config("repeatable"))).toEqual(simulateMatch(config("repeatable")));
@@ -51,7 +111,9 @@ describe("simulateMatch", () => {
     expect(result.finalState.score.home).toBe(result.teamStats.HOME.goals);
     expect(result.finalState.score.away).toBe(result.teamStats.AWAY.goals);
     expect(result.manOfTheMatch.rating).toBeGreaterThanOrEqual(5);
-    expect(result.events.every((event) => event.minute <= 60)).toBe(true);
+    expect(result.regulationMinutes).toBe(60);
+    expect(result.durationMinutes).toBe(60 + result.addedTime.firstHalf + result.addedTime.secondHalf);
+    expect(result.events.every((event) => event.minute <= result.durationMinutes)).toBe(true);
   });
 
   it("rejects teams that do not have five players", () => {
@@ -74,7 +136,7 @@ describe("simulateMatch", () => {
         let matchingPassFound = false;
         for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
           const prior = result.events[cursor]!;
-          if (prior.team !== event.team) break;
+          if (prior.snapshot.possession !== event.team || ["GOAL", "KICKOFF", "FREE_KICK", "PENALTY", "CORNER", "THROW_IN", "GOAL_KICK"].includes(prior.type)) break;
           if (prior.type === "PASS" && prior.successful && prior.playerId === event.secondaryPlayerId) {
             matchingPassFound = true;
             break;
@@ -84,4 +146,126 @@ describe("simulateMatch", () => {
       }
     }
   });
+});
+
+
+describe("attribute-driven match model", () => {
+  function ratedTeam(id: string, rating: number): Team {
+    const result = team(id);
+    result.lineup = result.lineup.map(slot => ({ ...slot, player: player(slot.player.id, slot.role, rating) }));
+    return result;
+  }
+
+  it("gives stronger lineups more goals, shots, possession and completed passes over many seeds", () => {
+    const homeTeam = ratedTeam("strong", 85);
+    const awayTeam = ratedTeam("weak", 65);
+    const totals = { homeGoals: 0, awayGoals: 0, homeShots: 0, awayShots: 0, possession: 0, homePasses: 0, awayPasses: 0 };
+    for (let seed = 0; seed < 150; seed++) {
+      const result = simulateMatch({ homeTeam, awayTeam, seed, durationMinutes: 90 });
+      totals.homeGoals += result.teamStats.HOME.goals;
+      totals.awayGoals += result.teamStats.AWAY.goals;
+      totals.homeShots += result.teamStats.HOME.shots;
+      totals.awayShots += result.teamStats.AWAY.shots;
+      totals.possession += result.teamStats.HOME.possession;
+      totals.homePasses += result.teamStats.HOME.passesCompleted;
+      totals.awayPasses += result.teamStats.AWAY.passesCompleted;
+    }
+    expect(totals.homeGoals).toBeGreaterThan(totals.awayGoals * 2);
+    expect(totals.homeShots).toBeGreaterThan(totals.awayShots * 1.5);
+    expect(totals.possession / 150).toBeGreaterThan(50);
+    expect(totals.homePasses).toBeGreaterThan(totals.awayPasses);
+  });
+
+  it("does not systematically favor either side with equal attributes", () => {
+    let possession = 0, homeGoals = 0, awayGoals = 0;
+    for (let seed = 0; seed < 200; seed++) {
+      const result = simulateMatch({ homeTeam: ratedTeam("home", 80), awayTeam: ratedTeam("away", 80), seed, durationMinutes: 90 });
+      possession += result.teamStats.HOME.possession;
+      homeGoals += result.teamStats.HOME.goals;
+      awayGoals += result.teamStats.AWAY.goals;
+    }
+    expect(possession / 200).toBeGreaterThan(47);
+    expect(possession / 200).toBeLessThan(53);
+    expect(homeGoals / awayGoals).toBeGreaterThan(0.8);
+    expect(homeGoals / awayGoals).toBeLessThan(1.25);
+  });
+
+  it("changes outcomes when detailed attributes change while overall stays fixed", () => {
+    const strongKeeper = ratedTeam("away", 80);
+    const weakKeeper = structuredClone(strongKeeper);
+    for (const key of ["goalkeeperDiving", "goalkeeperHandling", "goalkeeperPositioning", "goalkeeperReflexes"] as const) {
+      strongKeeper.lineup[0]!.player.attributes[key] = 95;
+      weakKeeper.lineup[0]!.player.attributes[key] = 25;
+    }
+    let strongConceded = 0, weakConceded = 0;
+    for (let seed = 0; seed < 120; seed++) {
+      const homeTeam = ratedTeam("home", 80);
+      strongConceded += simulateMatch({ homeTeam, awayTeam: strongKeeper, seed }).finalState.score.home;
+      weakConceded += simulateMatch({ homeTeam, awayTeam: weakKeeper, seed }).finalState.score.home;
+    }
+    expect(weakConceded).toBeGreaterThan(strongConceded * 1.5);
+  });
+
+  it("retains the receiving player as the next ball carrier and prevents shots during early buildup", () => {
+    const result = simulateMatch(config("carrier-continuity"));
+    for (const [index, event] of result.events.entries()) {
+      const next = result.events[index + 1];
+      if (event.type === "PASS" && event.successful && next && ["PASS", "DRIBBLE", "SHOT"].includes(next.type)) {
+        expect(next.team).toBe(event.team);
+        expect(next.playerId).toBe(event.secondaryPlayerId);
+      }
+      if (event.type === "SHOT") {
+        const prior = result.events[index - 1]?.snapshot ?? result.initialSnapshot;
+        expect(prior.phase).not.toBe("BUILDUP");
+      }
+    }
+  });
+
+  it("keeps replay snapshots, xG and score consistent with final statistics", () => {
+    const result = simulateMatch(config("replay-telemetry"));
+    expect(result.initialSnapshot.players).toHaveLength(10);
+    expect(result.initialSnapshot.teamStats.HOME.shots).toBe(0);
+    for (const event of result.events) {
+      const dismissed = result.events.slice(0, result.events.indexOf(event)+1).filter(e => e.type === "RED_CARD");
+      expect(event.snapshot.players).toHaveLength(10-dismissed.length);
+      expect(new Set(event.snapshot.players.map(p => p.key)).size).toBe(event.snapshot.players.length);
+      for (const red of dismissed) expect(event.snapshot.players.some(p => p.playerId===red.playerId && p.team===red.team)).toBe(false);
+      expect(event.snapshot.teamStats.HOME.possession + event.snapshot.teamStats.AWAY.possession).toBe(100);
+      expect(event.snapshot.teamStats.HOME.goals).toBe(event.score.home);
+      expect(event.snapshot.teamStats.AWAY.goals).toBe(event.score.away);
+      for (const point of [event.snapshot.ball, ...event.snapshot.players]) {
+        expect(point.x).toBeGreaterThanOrEqual(0); expect(point.x).toBeLessThanOrEqual(100);
+        expect(point.y).toBeGreaterThanOrEqual(0); expect(point.y).toBeLessThanOrEqual(100);
+      }
+    }
+    for (const side of ["HOME", "AWAY"] as const) {
+      const shots = result.events.filter(e => e.team === side && e.type === "SHOT");
+      expect(shots.reduce((sum, e) => sum + (e.expectedGoals ?? 0), 0)).toBeCloseTo(result.teamStats[side].expectedGoals, 3);
+      expect(shots.length).toBe(result.teamStats[side].shots);
+      expect(result.events.at(-1)!.snapshot.teamStats[side].shots).toBe(result.teamStats[side].shots);
+    }
+  });
+});
+
+
+it("uses forward roles and stamina instead of selecting all actors uniformly", () => {
+  let forwardShots = 0, defenderShots = 0;
+  for (let seed = 0; seed < 100; seed++) {
+    const match = simulateMatch(config(`roles-${seed}`));
+    for (const event of match.events.filter(e => e.type === "SHOT" && e.team === "HOME")) {
+      const slot = config("unused").homeTeam.lineup.find(s => s.player.id === event.playerId)!;
+      if (slot.role === "FWD") forwardShots++;
+      if (slot.role === "DEF") defenderShots++;
+    }
+  }
+  // Two defenders vs one forward: the forward should still take more shots.
+  expect(forwardShots).toBeGreaterThan(defenderShots);
+  const fit = config("fitness");
+  fit.homeTeam.lineup[3]!.player.attributes.stamina = 95;
+  fit.awayTeam.lineup[3]!.player.attributes.stamina = 20;
+  const result = simulateMatch(fit);
+  const players = result.events.at(-1)!.snapshot.players;
+  const home = players.find(p => p.key === `HOME:${fit.homeTeam.lineup[3]!.player.id}`)!;
+  const away = players.find(p => p.key === `AWAY:${fit.awayTeam.lineup[3]!.player.id}`)!;
+  expect(home.energy).toBeGreaterThan(away.energy);
 });

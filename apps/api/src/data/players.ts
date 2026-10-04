@@ -77,6 +77,10 @@ function fallbackCsvPath(): string {
   return path.resolve(moduleDirectory, "../../../../test.csv");
 }
 
+function normalizeSearch(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
 export class PlayerRepository {
   private readonly byHistoricalId = new Map<string, PlayerRecord>();
   private readonly byPlayerId = new Map<string, PlayerRecord[]>();
@@ -95,9 +99,8 @@ export class PlayerRepository {
     }
     this.searchIndex = records.map((record) => ({
       record,
-      text: [record.short_name, record.long_name, record.club_name, record.nationality_name, record.fifa_version]
-        .join(" ")
-        .toLocaleLowerCase(),
+      text: normalizeSearch([record.short_name, record.long_name, record.club_name, record.nationality_name,
+        record.fifa_version, `FIFA ${Number(record.fifa_version)}`, String(2000 + Number(record.fifa_version))].join(" ")),
       positions: new Set(record.player_positions.split(",").map((item) => item.trim().toLocaleUpperCase())),
     }));
     this.availableVersions = [...new Set(records.map((player) => player.fifa_version))]
@@ -131,12 +134,12 @@ export class PlayerRepository {
   }
 
   search({ query = "", version, position, limit = 30, offset = 0 }: PlayerSearch): PlayerPage {
-    const needle = query.trim().toLocaleLowerCase();
+    const terms = normalizeSearch(query).split(/\s+/).filter(Boolean);
     const wantedPosition = position?.trim().toLocaleUpperCase();
     const players: PlayerRecord[] = [];
     let total = 0;
     for (const indexed of this.searchIndex) {
-      const matches = (!needle || indexed.text.includes(needle))
+      const matches = terms.every((term) => indexed.text.includes(term))
         && (!version || indexed.record.fifa_version === version)
         && (!wantedPosition || indexed.positions.has(wantedPosition));
       if (!matches) continue;

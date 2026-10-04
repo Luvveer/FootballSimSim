@@ -68,20 +68,27 @@ export async function simulateMatch(homeName: string, awayName: string, home: Li
   const raw = await response.json() as EngineMatchResult
   const names = new Map(raw.playerStats.map((player) => [player.playerId, player.playerName]))
   return {
+    durationMinutes: raw.durationMinutes, regulationMinutes: raw.regulationMinutes,
+    halfTimeMinute: raw.halfTimeMinute, addedTime: raw.addedTime, status: raw.status,
     home: { name: homeName, score: raw.finalState.score.home, stats: normalizeStats(raw.teamStats.HOME) },
     away: { name: awayName, score: raw.finalState.score.away, stats: normalizeStats(raw.teamStats.AWAY) },
+    initialSnapshot: raw.initialSnapshot,
+    teamProfiles: raw.teamProfiles,
     events: raw.events.map((event) => ({
-      minute: Math.round(event.minute), type: normalizeEventType(event.type), team: event.team === 'AWAY' ? 'away' : 'home',
+      minute: event.minute, type: normalizeEventType(event.type), team: event.team === 'AWAY' ? 'away' : 'home',
       player: String(names.get(event.playerId) ?? ''), detail: event.description,
       homeScore: event.score.home, awayScore: event.score.away,
+      playerId: event.playerId, snapshot: event.snapshot, explanation: event.explanation, successful: event.successful, expectedGoals: event.expectedGoals,
+      offside: event.offside, restart: event.restart,
     })),
-    playerRatings: raw.playerStats.map((player) => ({ player:player.playerName, team:player.team === 'AWAY' ? 'away' : 'home', rating:player.rating })),
-    manOfTheMatch: { player:raw.manOfTheMatch.playerName, rating:raw.manOfTheMatch.rating },
+    playerRatings: raw.playerStats.map((player) => ({ player:player.playerName, playerId:player.playerId, team:player.team === 'AWAY' ? 'away' : 'home', rating:player.rating, yellowCards:player.yellowCards, redCards:player.redCards })),
+    manOfTheMatch: { player:raw.manOfTheMatch.playerName, playerId:raw.manOfTheMatch.playerId, team:raw.manOfTheMatch.team === 'AWAY' ? 'away' : 'home', rating:raw.manOfTheMatch.rating },
   }
 }
 
 function normalizeStats(stats: TeamMatchStats) {
-  return { possession:stats.possession, shots:stats.shots, shotsOnTarget:stats.shotsOnTarget, passAccuracy:stats.passesAttempted ? Math.round(stats.passesCompleted / stats.passesAttempted * 100) : 0 }
+  return { expectedGoals: stats.expectedGoals, possession:stats.possession, shots:stats.shots, shotsOnTarget:stats.shotsOnTarget, passAccuracy:stats.passesAttempted ? Math.round(stats.passesCompleted / stats.passesAttempted * 100) : 0,
+    fouls:stats.fouls, offsides:stats.offsides, corners:stats.corners, yellowCards:stats.yellowCards, redCards:stats.redCards, freeKicks:stats.freeKicks, penalties:stats.penalties }
 }
 
 function normalizeEventType(type: MatchEventType): MatchEvent['type'] {

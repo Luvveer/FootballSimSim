@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parsePlayers, PlayerRepository } from "./players.js";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { PlayerRepository, parsePlayers } from "./players.js";
 
 const header = "player_id,fifa_version,fifa_update,update_as_of,short_name,long_name,player_positions,overall,club_name,nationality_name";
 
@@ -27,4 +30,25 @@ describe("player data", () => {
     expect(repository.versionsFor("1").map((player) => player.fifa_version)).toEqual(["19", "20"]);
     expect(repository.versionsFor("missing")).toEqual([]);
   });
+});
+
+
+it("searches accents, combined terms, clubs and FIFA years across pages", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "player-search-"));
+  try {
+    const file = path.join(directory, "players.csv");
+    await writeFile(file, [header,
+      '1,24.0,1,2023-01-01,K. Mbappé,Kylian Mbappé,"ST, LW",91,Paris,France',
+      '1,23.0,1,2022-01-01,K. Mbappé,Kylian Mbappé,ST,90,Paris,France',
+      '2,24.0,1,2023-01-01,B,Beta,GK,80,London,England',
+    ].join("\n"));
+    const repository = await PlayerRepository.load(file);
+    expect(repository.search({ query: "Mbappe" }).total).toBe(2);
+    expect(repository.search({ query: "  MBAPPE  FIFA 24 " }).total).toBe(1);
+    expect(repository.search({ query: "2024", position: "LW" }).total).toBe(1);
+    expect(repository.search({ query: "Paris Mbappe", limit: 1, offset: 1 })).toMatchObject({ total: 2, players: [{ fifa_version: "23.0" }] });
+    expect(repository.search({ query: "missing" }).total).toBe(0);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

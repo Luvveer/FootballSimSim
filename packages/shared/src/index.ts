@@ -6,7 +6,10 @@ export type MatchEventType =
   | "DRIBBLE"
   | "SHOT"
   | "SAVE"
-  | "GOAL";
+  | "GOAL" | "KICKOFF" | "HALF_TIME" | "FULL_TIME" | "ADDED_TIME"
+  | "OFFSIDE" | "FOUL" | "ADVANTAGE" | "YELLOW_CARD" | "RED_CARD"
+  | "FREE_KICK" | "PENALTY" | "THROW_IN" | "CORNER" | "GOAL_KICK"
+  | "BALL_OUT" | "BLOCK" | "MATCH_ABANDONED";
 
 export type PitchRole = "GK" | "DEF" | "MID" | "FWD";
 
@@ -17,6 +20,11 @@ export interface PlayerAttributes {
   dribbling: number;
   defending: number;
   physical: number;
+  stamina?: number;
+  positioning?: number;
+  aggression?: number;
+  penalties?: number;
+  goalkeeperKicking?: number;
   finishing?: number;
   vision?: number;
   composure?: number;
@@ -88,6 +96,48 @@ export interface MatchEvent {
   successful: boolean;
   description: string;
   score: MatchScore;
+  snapshot: ReplaySnapshot;
+  explanation: string;
+  probability?: number;
+  expectedGoals?: number;
+  offside?: OffsideDecision;
+  restart?: RestartType;
+}
+
+export type RestartType = "KICKOFF" | "FREE_KICK" | "PENALTY" | "THROW_IN" | "CORNER" | "GOAL_KICK";
+export interface OffsideDecision {
+  offside: boolean;
+  lineX: number;
+  ball: PitchPoint;
+  receiver: PitchPoint;
+  receiverId: string;
+  direction: 1 | -1;
+}
+export interface PitchPoint { x: number; y: number }
+export interface ReplayPlayer extends PitchPoint {
+  key: string;
+  playerId: string;
+  team: TeamSide;
+  name: string;
+  slotId: string;
+  energy: number;
+  yellowCards: number;
+}
+export interface TeamProfile {
+  attack: number;
+  control: number;
+  defence: number;
+  goalkeeping: number;
+}
+export interface ReplaySnapshot {
+  ball: PitchPoint;
+  players: ReplayPlayer[];
+  possession: TeamSide;
+  phase: "BUILDUP" | "PROGRESSION" | "ATTACK" | "SHOT" | "GOAL" | "RESTART" | "HALF_TIME" | "FULL_TIME";
+  period: 1 | 2;
+  direction: Record<TeamSide, 1 | -1>;
+  status: "PLAY" | "STOPPAGE" | "HALF_TIME" | "FULL_TIME" | "ABANDONED";
+  teamStats: Record<TeamSide, TeamMatchStats>;
 }
 
 export interface PlayerMatchStats {
@@ -106,6 +156,9 @@ export interface PlayerMatchStats {
   assists: number;
   saves: number;
   rating: number;
+  fouls: number;
+  yellowCards: number;
+  redCards: number;
 }
 
 export interface TeamMatchStats {
@@ -119,6 +172,14 @@ export interface TeamMatchStats {
   shotsOnTarget: number;
   goals: number;
   saves: number;
+  expectedGoals: number;
+  fouls: number;
+  offsides: number;
+  corners: number;
+  yellowCards: number;
+  redCards: number;
+  freeKicks: number;
+  penalties: number;
 }
 
 export interface ManOfTheMatch {
@@ -130,8 +191,15 @@ export interface ManOfTheMatch {
 
 export interface MatchResult {
   seed: string;
+  regulationMinutes: number;
+  halfTimeMinute: number;
+  addedTime: { firstHalf: number; secondHalf: number };
+  status: "COMPLETED" | "ABANDONED";
+  ruleset: "CUSTOM_FIVE_A_SIDE_FOOTBALL";
   durationMinutes: number;
   finalState: MatchState;
+  initialSnapshot: ReplaySnapshot;
+  teamProfiles: Record<TeamSide, TeamProfile>;
   events: MatchEvent[];
   teamStats: Record<TeamSide, TeamMatchStats>;
   playerStats: PlayerMatchStats[];

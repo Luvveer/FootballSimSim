@@ -80,7 +80,6 @@ function PlayerFigure({ player, motion, carrier, throwing }: {
           <path className="pitch-shorts" d="M-8,-18 H8 L9,-12 H2 L0,-16 L-2,-12 H-9 Z"/>
           <circle className="pitch-head" cx="0" cy="-44" r="6.5"/>
           <path className="pitch-hair" d="M-6,-45 Q-5,-53 2,-50 Q6,-49 6,-44 L3,-46 L-5,-45 Z"/>
-          <text className="pitch-shirt-number" x="0" y="-22">{player.role === 'GK' ? '1' : player.slotId}</text>
           {player.yellowCards > 0 && <rect className="pitch-yellow-card" x="13" y="-40" width="5" height="8" rx="1"/>}
         </g>
       </g>

@@ -130,12 +130,12 @@ export function App() {
       </div>
     </main>
     {comparisonPlayer && <PlayerComparison player={comparisonPlayer} onClose={() => setComparisonPlayer(null)} />}
-    <footer className="action-bar"><div><b>{ready ? 'Both teams are ready' : `${10-filled} spots left to fill`}</b><span>{ready ? 'Your 60-second match is ready to kick off.' : 'Pick a position on either pitch, then choose a player.'}</span></div><button className="start-button" disabled={!ready || loading} onClick={start}>{loading ? <span className="spinner"/> : <Play size={19} fill="currentColor"/>}{loading ? 'Building match…' : 'Start match'}</button></footer>
+    <footer className="action-bar"><div><b>{ready ? 'Both teams are ready' : `${10-filled} spots left to fill`}</b><span>{ready ? '45 seconds per half, a 5-second break, plus added time.' : 'Pick a position on either pitch, then choose a player.'}</span></div><button className="start-button" disabled={!ready || loading} onClick={start}>{loading ? <span className="spinner"/> : <Play size={19} fill="currentColor"/>}{loading ? 'Building match…' : 'Start match'}</button></footer>
   </div>
 }
 
 export function Header({ step }:{ step:'build'|'match'|'result' }) {
-  return <header className="topbar"><a className="brand" href="#" aria-label="FootballSimSim home"><span className="brand-mark"><CircleDot size={22}/></span><span>FOOTBALL<span>SIM</span>SIM</span></a><nav aria-label="Match progress"><span className={step==='build'?'current':''}>01 Build</span><i/><span className={step==='match'?'current':''}>02 Match</span><i/><span className={step==='result'?'current':''}>03 Results</span></nav><div className="format"><Gauge size={16}/><span>5v5 · 60 sec</span></div></header>
+  return <header className="topbar"><a className="brand" href="#" aria-label="FootballSimSim home"><span className="brand-mark"><CircleDot size={22}/></span><span>FOOTBALL<span>SIM</span>SIM</span></a><nav aria-label="Match progress"><span className={step==='build'?'current':''}>01 Build</span><i/><span className={step==='match'?'current':''}>02 Match</span><i/><span className={step==='result'?'current':''}>03 Results</span></nav><div className="format"><Gauge size={16}/><span>5v5 · 1 min = 1 sec</span></div></header>
 }
 
 function TeamHeader({side,name,setName,active,onClick}:{side:Side;name:string;setName:(name:string)=>void;active:boolean;onClick:()=>void}) {

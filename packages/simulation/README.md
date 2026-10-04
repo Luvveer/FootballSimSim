@@ -36,6 +36,20 @@ duels; positioning influences runs; finishing/composure compete with goalkeeping
 Stamina, role fit and numerical strength affect abilities throughout the match.
 The same seed and lineups reproduce the same match.
 
+Players now retain positions between events. Pace and remaining energy limit
+travel; vision and positioning guide support runs, available passing lanes and
+offside awareness. Nearby defenders press or mark, with the strongest covering
+player staying deeper. Goalkeepers adjust their depth and lateral position.
+Passing, pace and vision determine possession/direct/balanced play. Trailing
+teams raise the line, widen support and increase tempo; late leaders sit deeper
+and favour safer possession. Shot distance and angle contribute to chance quality.
+
+Throw-ins include a setup snapshot: the ball holds at the boundary while a taker
+walks to it. The ready snapshot places that player at the touchline, followed by
+a delivery toward a teammate with a lofted replay arc. Set-piece constraints are
+applied at the restart. Added-time allowances model restart delays and discipline;
+ordinary dead-ball time is still part of the running clock.
+
 This is an event model, not a complete implementation of every IFAB law or a
 physical tracking system. Body-part geometry, off-ball interference, DOGSO
 assessment, penalty encroachment/retakes, goalkeeper handling violations,
@@ -48,3 +62,7 @@ Offside metadata preserves the positions at the kick; its displayed guide is
 labelled "At the pass" to distinguish that decision from interpolated movement.
 `durationMinutes` includes added time; `regulationMinutes` does not. The replay
 uses that actual timeline for both its clock and progress bar.
+At normal playback speed, one game minute takes one real second. Each half takes
+45 seconds plus its added-time seconds. Half-time inserts a five-second blurred
+interval with the clock and event feed frozen. Speed controls affect play but
+keep that interval at five real seconds; pausing freezes the interval too.

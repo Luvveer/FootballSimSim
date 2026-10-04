@@ -1,4 +1,4 @@
-import type { MatchEventType, OffsideDecision, ReplaySnapshot, RestartType, TeamProfile } from '@footballsimsim/shared'
+import type { MatchEvent as EngineMatchEvent, MatchEventType, OffsideDecision, ReplaySnapshot, RestartType, TeamProfile } from '@footballsimsim/shared'
 export type Player = {
   id: string
   name: string
@@ -36,6 +36,7 @@ export type MatchEvent = {
   expectedGoals?: number
   offside?: OffsideDecision
   restart?: RestartType
+  ballMotion?: EngineMatchEvent['ballMotion']
 }
 
 export type TeamStats = {

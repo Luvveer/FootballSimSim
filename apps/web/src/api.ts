@@ -13,6 +13,7 @@ const mapPlayer = (raw: Record<string, unknown>, index: number): Player => ({
   pace: Number(raw.pace ?? raw.pac ?? (raw.attributes as Record<string,unknown>)?.pace ?? 0),
   shooting: Number(raw.shooting ?? raw.sho ?? (raw.attributes as Record<string,unknown>)?.shooting ?? 0),
   passing: Number(raw.passing ?? raw.pas ?? (raw.attributes as Record<string,unknown>)?.passing ?? 0),
+  dribbling: Number(raw.dribbling ?? raw.dri ?? (raw.attributes as Record<string,unknown>)?.dribbling ?? 0),
   defending: Number(raw.defending ?? raw.def ?? (raw.attributes as Record<string,unknown>)?.defending ?? 0),
   physical: Number(raw.physical ?? raw.phy ?? raw.physic ?? (raw.attributes as Record<string,unknown>)?.physical ?? 0), image: typeof raw.image === 'string' ? raw.image : undefined,
 })
@@ -22,6 +23,14 @@ export interface PlayerPage {
   total: number
   limit: number
   offset: number
+}
+
+export async function fetchPlayerVersions(playerId: string, signal?: AbortSignal): Promise<Player[]> {
+  const response = await fetch(`/api/players/${encodeURIComponent(playerId)}/versions`, { signal })
+  if (!response.ok) throw new Error('Could not load this player\'s FIFA history.')
+  const body = await response.json() as { players?: Record<string, unknown>[] }
+  if (!Array.isArray(body.players)) throw new Error('The player history response is invalid.')
+  return body.players.map(mapPlayer)
 }
 
 export async function fetchPlayers(query = '', position = 'ALL', offset = 0, signal?: AbortSignal): Promise<PlayerPage> {

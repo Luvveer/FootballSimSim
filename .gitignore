@@ -6,3 +6,4 @@ coverage/
 .DS_Store
 design-system/
 male_players.csv
+test.csv

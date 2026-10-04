@@ -72,14 +72,26 @@ export function defaultCsvPath(): string {
   return path.resolve(moduleDirectory, "../../../../male_players.csv");
 }
 
+function fallbackCsvPath(): string {
+  const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(moduleDirectory, "../../../../test.csv");
+}
+
 export class PlayerRepository {
   private readonly byHistoricalId = new Map<string, PlayerRecord>();
+  private readonly byPlayerId = new Map<string, PlayerRecord[]>();
   private readonly searchIndex: Array<{ record: PlayerRecord; text: string; positions: Set<string> }>;
   private readonly availableVersions: string[];
 
   private constructor(private readonly records: PlayerRecord[]) {
     for (const record of records) {
       this.byHistoricalId.set(`${record.player_id}\u0000${record.fifa_version}`, record);
+      const versions = this.byPlayerId.get(record.player_id) ?? [];
+      versions.push(record);
+      this.byPlayerId.set(record.player_id, versions);
+    }
+    for (const versions of this.byPlayerId.values()) {
+      versions.sort((a, b) => numeric(a.fifa_version) - numeric(b.fifa_version));
     }
     this.searchIndex = records.map((record) => ({
       record,
@@ -92,8 +104,14 @@ export class PlayerRepository {
       .sort((a, b) => numeric(b) - numeric(a));
   }
 
-  static async load(csvPath = defaultCsvPath()): Promise<PlayerRepository> {
-    return new PlayerRepository(parsePlayers(await readFile(csvPath, "utf8")));
+  static async load(csvPath?: string): Promise<PlayerRepository> {
+    if (csvPath) return new PlayerRepository(parsePlayers(await readFile(csvPath, "utf8")));
+    try {
+      return new PlayerRepository(parsePlayers(await readFile(defaultCsvPath(), "utf8")));
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+      return new PlayerRepository(parsePlayers(await readFile(fallbackCsvPath(), "utf8")));
+    }
   }
 
   all(): readonly PlayerRecord[] {
@@ -106,6 +124,10 @@ export class PlayerRepository {
 
   find(playerId: string, fifaVersion: string): PlayerRecord | undefined {
     return this.byHistoricalId.get(`${playerId}\u0000${fifaVersion}`);
+  }
+
+  versionsFor(playerId: string): readonly PlayerRecord[] {
+    return this.byPlayerId.get(playerId) ?? [];
   }
 
   search({ query = "", version, position, limit = 30, offset = 0 }: PlayerSearch): PlayerPage {

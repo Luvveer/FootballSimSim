@@ -34,20 +34,26 @@ describe("API routes", () => {
   it("reports the loaded player count", async () => {
     const response = await app.inject({ method: "GET", url: "/health" });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ status: "ok", players: 5 });
+    expect(response.json()).toEqual({ status: "ok", players: 6 });
   });
 
   it("searches players through the HTTP contract", async () => {
     const response = await app.inject({ method: "GET", url: "/players?q=keeper" });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ total: 1, players: [{ player_id: "1" }] });
+    expect(response.json()).toMatchObject({ total: 2, players: [{ player_id: "1" }, { player_id: "1" }] });
   });
 
   it("paginates players without changing the total", async () => {
     const response = await app.inject({ method: "GET", url: "/players?limit=2&offset=2" });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ total: 5, limit: 2, offset: 2 });
+    expect(response.json()).toMatchObject({ total: 6, limit: 2, offset: 2 });
     expect(response.json().players).toHaveLength(2);
+  });
+
+  it("returns every FIFA version of one player", async () => {
+    const response = await app.inject({ method: "GET", url: "/players/1/versions" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().players.map((player: { fifa_version: string }) => player.fifa_version)).toEqual(["19", "20"]);
   });
 
   it("simulates a valid five-a-side match", async () => {

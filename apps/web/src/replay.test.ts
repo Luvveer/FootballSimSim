@@ -14,12 +14,23 @@ const player = (key:string,x:number):ReplayPlayer=>({key,x,y:48,playerId:key,nam
 describe('match playback timing',()=>{
   it('plays one minute per second, freezing the clock for a five-second interval',()=>{
     expect(matchTimeline(result,0)).toMatchObject({minute:0,progress:0,half:0.5})
-    expect(matchTimeline(result,30)).toMatchObject({minute:30,progress:30/96,inHalfTime:false})
+    expect(matchTimeline(result,30)).toMatchObject({minute:30,progress:0.5*(30/45),inHalfTime:false})
     expect(matchTimeline(result,48)).toMatchObject({minute:48,progress:0.5,inHalfTime:true,breakRemaining:5,period:1})
     expect(matchTimeline(result,52)).toMatchObject({minute:48,progress:0.5,inHalfTime:true,breakRemaining:1})
     expect(matchTimeline(result,53)).toMatchObject({minute:48,inHalfTime:false,period:2})
     expect(matchTimeline(result,101)).toMatchObject({minute:96,progress:1,complete:true})
     expect(replayTiming(result).totalSeconds).toBe(101)
+  })
+  it('keeps the half-time marker in the middle and holds the bar during added time',()=>{
+    // First half runs to 48 (3 minutes added), the match to 96.
+    expect(matchTimeline(result,0).half).toBe(0.5)
+    expect(matchTimeline(result,45).progress).toBe(0.5)
+    expect(matchTimeline(result,46.5)).toMatchObject({minute:46.5,progress:0.5,half:0.5})
+    expect(matchTimeline(result,48)).toMatchObject({progress:0.5,inHalfTime:true})
+    expect(matchTimeline(result,53)).toMatchObject({minute:48,progress:0.5,period:2})
+    expect(matchTimeline(result,53+22.5).progress).toBe(0.75)
+    expect(matchTimeline(result,53+45).progress).toBe(1)
+    expect(matchTimeline(result,53+47)).toMatchObject({progress:1,minute:95})
   })
   it('takes exactly 45 seconds per half and keeps the break at five real seconds at any speed',()=>{
     const regulation={durationMinutes:90,regulationMinutes:90,halfTimeMinute:45} as MatchResult

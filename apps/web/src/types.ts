@@ -1,6 +1,7 @@
 import type { MatchEvent as EngineMatchEvent, MatchEventType, OffsideDecision, PitchRole, ReplaySnapshot, RestartType, TeamProfile } from '@footballsimsim/shared'
 export type Player = {
   id: string
+  playerId: string
   name: string
   fullName?: string
   version: string

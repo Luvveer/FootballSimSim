@@ -16,11 +16,14 @@ export const mapPlayer = (raw: Record<string, unknown>, index: number): Player =
       : String(raw.position ?? raw.playerPositions ?? raw.player_positions ?? '')
   const position = normalizePositions(sourcePositions)[0]
   if (!position) throw new Error('The player response contains an unsupported position.')
+  const playerId = String(raw.playerId ?? raw.player_id ?? raw.id ?? `${raw.name ?? raw.short_name}-${index}`)
+  const version = String(raw.version ?? raw.fifaVersion ?? raw.fifa_version ?? 'FIFA')
   return {
-    id: String(raw.id ?? raw.playerId ?? raw.player_id ?? `${raw.name ?? raw.short_name}-${raw.version ?? raw.fifaVersion ?? index}`),
+    id: `${playerId}:${version}`,
+    playerId,
     name: String(raw.name ?? raw.short_name ?? 'Unknown player'),
     fullName: String(raw.fullName ?? raw.longName ?? raw.long_name ?? '') || undefined,
-    version: String(raw.version ?? raw.fifaVersion ?? raw.fifa_version ?? 'FIFA'),
+    version,
     rating: Number(raw.rating ?? raw.overall ?? 0),
     position,
     club: String(raw.club ?? raw.clubName ?? raw.club_name ?? 'Free agent'),
@@ -66,17 +69,17 @@ export async function fetchPlayers(query = '', position: PitchRole | 'ALL' = 'AL
   }
 }
 
-const selected = (lineup: Lineup, formation: string) => FORMATIONS[formation].map(slot => ({
+export const lineupSelections = (lineup: Lineup, formation: string) => FORMATIONS[formation].map(slot => ({
   slotId: slot.id,
   role: slot.role,
-  playerId: lineup[slot.id]!.id,
+  playerId: lineup[slot.id]!.playerId,
   fifaVersion: lineup[slot.id]!.version,
 }))
 
 export async function simulateMatch(homeName: string, awayName: string, home: Lineup, away: Lineup, homeFormation: string, awayFormation: string): Promise<MatchResult> {
   const response = await fetch('/api/matches/simulate', {
     method:'POST', headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify({ seed: Date.now(), durationMinutes:90, homeTeam:{ id:'home', name:homeName, formation:homeFormation, lineup:selected(home, homeFormation) }, awayTeam:{ id:'away', name:awayName, formation:awayFormation, lineup:selected(away, awayFormation) } }),
+    body: JSON.stringify({ seed: Date.now(), durationMinutes:90, homeTeam:{ id:'home', name:homeName, formation:homeFormation, lineup:lineupSelections(home, homeFormation) }, awayTeam:{ id:'away', name:awayName, formation:awayFormation, lineup:lineupSelections(away, awayFormation) } }),
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { issues?: string[] } | null

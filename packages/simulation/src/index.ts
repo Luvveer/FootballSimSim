@@ -92,6 +92,9 @@ export function simulateMatch(config: MatchConfig): MatchResult {
   let period: 1 | 2 = 1;
   let halfTimeMinute = regulation / 2;
   let periodEnd = regulation / 2;
+  // A period can only end once the ball is out of both end quarters of the pitch, but play stops after 5 minutes (5 seconds on screen) regardless.
+  const MAX_WHISTLE_DELAY = 5;
+  let whistleOverrun = 0;
   let addedAnnounced = false;
   let lostSeconds = 0;
   let abandoned = false;
@@ -370,6 +373,14 @@ export function simulateMatch(config: MatchConfig): MatchResult {
       }
       // Extend either half to complete a penalty awarded before its whistle.
       if (pending?.type === "PENALTY") takeRestart();
+      const ballX = ballPosition().x;
+      if ((ballX < 25 || ballX > 75) && whistleOverrun < MAX_WHISTLE_DELAY) {
+        // Extend by about one action step, otherwise the loop only advances the clock and the ball never moves.
+        const extension = Math.min(1.75, MAX_WHISTLE_DELAY - whistleOverrun);
+        periodEnd += extension; whistleOverrun += extension;
+        continue;
+      }
+      whistleOverrun = 0;
       if (period === 1) {
         halfTimeMinute = minute;
         emit("HALF_TIME", side, carrier, true, "Half time. The teams change ends.", "The team that did not take the opening kickoff starts the second half.");

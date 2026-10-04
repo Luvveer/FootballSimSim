@@ -50,7 +50,10 @@ describe("football match lifecycle", () => {
     expect(second.snapshot.direction.HOME).toBe(-1);
     expect(second.snapshot.period).toBe(2);
     expect(result.events.at(-1)!.type).toBe("FULL_TIME");
-    expect(result.durationMinutes).toBe(60+result.addedTime.firstHalf+result.addedTime.secondHalf);
+    // The whistle waits for the ball to leave the end quarters, so play can run a little past the announced added time.
+    const announced = 60 + result.addedTime.firstHalf + result.addedTime.secondHalf;
+    expect(result.durationMinutes).toBeGreaterThanOrEqual(announced);
+    expect(result.durationMinutes).toBeLessThanOrEqual(announced + 10);
   });
 
   it("awards defending indirect free kicks for offside and tracks discipline without retaining sent-off players", () => {
@@ -112,7 +115,10 @@ describe("simulateMatch", () => {
     expect(result.finalState.score.away).toBe(result.teamStats.AWAY.goals);
     expect(result.manOfTheMatch.rating).toBeGreaterThanOrEqual(5);
     expect(result.regulationMinutes).toBe(60);
-    expect(result.durationMinutes).toBe(60 + result.addedTime.firstHalf + result.addedTime.secondHalf);
+    // The whistle waits for the ball to leave the end quarters, so play can run a little past the announced added time.
+    const announced = 60 + result.addedTime.firstHalf + result.addedTime.secondHalf;
+    expect(result.durationMinutes).toBeGreaterThanOrEqual(announced);
+    expect(result.durationMinutes).toBeLessThanOrEqual(announced + 10);
     expect(result.events.every((event) => event.minute <= result.durationMinutes)).toBe(true);
   });
 
@@ -289,4 +295,20 @@ it("uses forward roles and stamina instead of selecting all actors uniformly", (
   const home = players.find(p => p.key === `HOME:${fit.homeTeam.lineup[3]!.player.id}`)!;
   const away = players.find(p => p.key === `AWAY:${fit.awayTeam.lineup[3]!.player.id}`)!;
   expect(home.energy).toBeGreaterThan(away.energy);
+});
+
+it("waits for the ball to leave the end quarters before the whistle, for at most 5 minutes", () => {
+  for (let n = 0; n < 40; n++) {
+    const result = simulateMatch(config(`whistle-${n}`));
+    for (const event of result.events.filter(e => e.type === "HALF_TIME" || e.type === "FULL_TIME")) {
+      const planned = event.type === "HALF_TIME" ? 30 + result.addedTime.firstHalf : result.halfTimeMinute + 30 + result.addedTime.secondHalf;
+      const delay = event.minute - planned;
+      expect(delay).toBeLessThanOrEqual(5.01);
+      // Inside the 5 minute allowance the whistle only blows with the ball in the middle half.
+      if (delay < 4.99) {
+        expect(event.snapshot.ball.x).toBeGreaterThanOrEqual(25);
+        expect(event.snapshot.ball.x).toBeLessThanOrEqual(75);
+      }
+    }
+  }
 });

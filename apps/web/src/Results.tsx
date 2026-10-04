@@ -64,5 +64,5 @@ export function Results({result,onReplay,onReset}:{result:MatchResult;onReplay:(
 }
 
 function GoalRow({event,name,assist,clock}:{event:MatchEvent;name:string;assist?:string;clock:string}) {
-  return <article className={`report-goal ${event.team}`}><time>{clock}</time><span className="goal-ball"><CircleDot size={16}/></span><div><b>{name}</b><small>{assist ? `Assist by ${assist}` : 'Unassisted'}</small></div><span className="goal-score">{event.homeScore} <i>:</i> {event.awayScore}</span></article>
+  return <article className={`report-goal ${event.team}`}><time>{clock}</time><span className="goal-ball"><CircleDot size={16}/></span><div><b>{name}</b>{assist && <small>Assist by {assist}</small>}</div><span className="goal-score">{event.homeScore} <i>:</i> {event.awayScore}</span></article>
 }

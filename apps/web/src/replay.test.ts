@@ -79,6 +79,8 @@ describe('match playback timing',()=>{
     const holding=replayFrame([start,end],start.snapshot,2)
     expect(holding.snapshot!.ball.x).toBe(holding.snapshot!.players[0]!.x)
     expect(holding.path).toBeUndefined()
+    expect(holding.rotation).toBeGreaterThan(0)
+    expect(replayFrame([start,end],start.snapshot,2.1).rotation).toBeGreaterThan(holding.rotation)
     const beforeKick=replayFrame([start,end],start.snapshot,3.35-0.0001)
     const afterKick=replayFrame([start,end],start.snapshot,3.35+0.0001)
     expect(Math.abs(afterKick.snapshot!.ball.x-beforeKick.snapshot!.ball.x)).toBeLessThan(0.05)
@@ -88,6 +90,12 @@ describe('match playback timing',()=>{
     expect(arrival.visibleCount).toBe(1)
     expect(arrival.snapshot!.ball.x).toBeCloseTo(70,1)
     expect(replayFrame([start,end],start.snapshot,4).snapshot!.carrierKey).toBe('receiver')
+    expect(arrival.rotation).toBeCloseTo(replayFrame([start,end],start.snapshot,4).rotation, 0)
+  })
+  it('does not rotate a stationary ball while waiting for a pass',()=>{
+    const events=[event(0,10),event(4,70)]
+    expect(replayFrame(events,snapshot(10),2).rotation).toBe(0)
+    expect(replayFrame(events,snapshot(10),3).rotation).toBe(0)
   })
   it('uses brisk passing motion for an interception without revealing the turnover early',()=>{
     const start=event(0,10),pass=event(4,90),interception=event(4,70,'interception')
@@ -130,6 +138,19 @@ describe('match playback timing',()=>{
     expect(flight.snapshot!.ball.x).toBeGreaterThan(30)
     expect(flight.snapshot!.ball.x).toBeLessThan(50)
     expect(flight.loft).toBeGreaterThan(0)
+    // Height is presentation data, not a sideways bend on the pitch.
+    expect(flight.snapshot!.ball.y).toBeCloseTo((flight.snapshot!.ball.x-30)/20*50)
     expect(replayFrame([setup,ready,receive],setup.snapshot,3.2).snapshot!.ball).toEqual({x:50,y:50})
+  })
+  it('uses replay position to drive deterministic movement poses and holds them at breaks', () => {
+    const start = event(0, 10), end = event(4, 70)
+    start.snapshot!.players = [player('runner', 10)]
+    end.snapshot!.players = [player('runner', 45)]
+    const frame = replayFrame([start, end], start.snapshot, 2)
+    expect(frame.playerMotion.runner.activity).toBeGreaterThan(0)
+    expect(frame.playerMotion.runner.facing).toBe(1)
+    expect(replayFrame([start, end], start.snapshot, 2).playerMotion).toEqual(frame.playerMotion)
+    start.snapshot!.status = 'HALF_TIME'
+    expect(replayFrame([start, end], start.snapshot, 2).playerMotion).toEqual({})
   })
 })

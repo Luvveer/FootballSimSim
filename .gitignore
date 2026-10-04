@@ -5,6 +5,10 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 design-system/
+# Local Impeccable metadata, surface briefs, and review screenshots.
+.impeccable/
+/apps/web/DESIGN.md
+/apps/web/PRODUCT.md
 male_players.csv
 players.csv
 test.csv

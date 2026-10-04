@@ -1,5 +1,7 @@
 import type { PitchPoint, ReplaySnapshot } from '@footballsimsim/shared'
 import type { MatchEvent, MatchResult } from './types'
+import { ballRollDegrees } from './ball-appearance'
+import { projectPitch } from './pitch-geometry'
 
 export const HALF_TIME_BREAK_SECONDS = 5
 
@@ -55,6 +57,12 @@ export function matchClock(result: MatchResult, minute: number, period?: 1 | 2) 
 const mix = (start: number, end: number, amount: number) => start + (end - start) * amount
 const smooth = (value: number) => value * value * (3 - 2 * value)
 
+export interface ReplayPlayerMotion {
+  facing: 1 | -1
+  activity: number
+  stride: number
+}
+
 // Event results are revealed at their timestamp. Movement fills the time between
 // those timestamps, so pause and speed controls share the same animation clock.
 export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | undefined, minute: number, holdHalfTime = false) {
@@ -67,11 +75,16 @@ export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | unde
   }
   const visibleCount = low
   let rotation = 0
+  let rollDirection: PitchPoint = { x: 1, y: 0 }
   let priorBall = initial?.ball
   for (let index = 0; index < visibleCount; index++) {
     if (index + 1 < visibleCount && events[index + 1]!.minute === events[index]!.minute) continue
     const ball = events[index]!.snapshot?.ball
-    if (priorBall && ball) rotation += Math.hypot(ball.x - priorBall.x, ball.y - priorBall.y) * 9
+    if (priorBall && ball) {
+      rotation += ballRollDegrees(priorBall, ball)
+      const a = projectPitch(priorBall), b = projectPitch(ball)
+      if (Math.hypot(b.x-a.x, b.y-a.y) > 0.001) rollDirection = { x: b.x-a.x, y: b.y-a.y }
+    }
     if (ball) priorBall = ball
   }
   const latest = events[visibleCount - 1]
@@ -88,11 +101,12 @@ export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | unde
   const startMinute = latest?.minute ?? 0
   const duration = next ? next.minute - startMinute : 0
   const progress = duration > 0 ? Math.min(1, Math.max(0, (minute - startMinute) / duration)) : 1
-  if (!from || !next?.snapshot || !duration) return { visibleCount, snapshot: from, path: undefined, rotation }
+  const still = { visibleCount, snapshot: from, path: undefined, rotation, rollDirection, loft: 0, playerMotion: {} as Record<string, ReplayPlayerMotion> }
+  if (!from || !next?.snapshot || !duration) return still
   const to = next.snapshot
   // A half-time break holds the pitch until the new kickoff. Do not animate
   // players through one another as the two teams change ends.
-  if (from.status === 'HALF_TIME' || from.status === 'FULL_TIME' || from.status === 'ABANDONED') return { visibleCount, snapshot: from, path: undefined, rotation }
+  if (from.status === 'HALF_TIME' || from.status === 'FULL_TIME' || from.status === 'ABANDONED') return still
   const movement = smooth(progress)
   const destinations = new Map(to.players.map(player => [player.key, player]))
   // Keep the initiating pass when its result (e.g. an interception) shares the
@@ -120,9 +134,20 @@ export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | unde
   const flight = pass ? mix(flightProgress, smooth(flightProgress), 0.15) : smooth(progress)
   const distance = Math.hypot(to.ball.x - release.x, to.ball.y - release.y)
   // Small passing arc, with both endpoints exactly on the engine's ball positions.
-  const curve = pass ? Math.sin(Math.PI * flight) * (throwing ? (from.ball.y>50?-5:5) : Math.min(1.5, distance / 20)) : 0
+  // Ground curvature is independent of altitude; the pitch renderer draws
+  // the airborne ball above this position and its shadow at this position.
+  const curve = pass && !throwing ? Math.sin(Math.PI * flight) * Math.min(1.5, distance / 20) : 0
   const ball: PitchPoint = pass && flightProgress === 0 ? carriedBall(movement)
     : { x: mix(release.x, to.ball.x, flight), y: mix(release.y, to.ball.y, flight) - curve }
+  // Include dribbling before release. Normalize to the endpoint rotation so a
+  // new event does not reset the panel phase when a curved pass arrives.
+  const heldDistance = pass ? ballRollDegrees(from.ball, release) : 0
+  const routeDistance = heldDistance + ballRollDegrees(release, to.ball)
+  const traveled = pass && flightProgress === 0 ? ballRollDegrees(from.ball, ball)
+    : heldDistance + ballRollDegrees(release, to.ball) * flight
+  const rollProgress = routeDistance > 0 ? traveled / routeDistance : 0
+  const a = projectPitch(from.ball), b = projectPitch(to.ball)
+  if (Math.hypot(b.x-a.x, b.y-a.y) > 0.001) rollDirection = { x: b.x-a.x, y: b.y-a.y }
   return {
     visibleCount,
     snapshot: { ...from, ball, players: from.players.map(player => {
@@ -130,7 +155,20 @@ export function replayFrame(events: MatchEvent[], initial: ReplaySnapshot | unde
       return { ...player, x: mix(player.x, target.x, movement), y: mix(player.y, target.y, movement) }
     }) },
     path: distance > 3 && (!pass || flightProgress > 0) ? { from: release, to: to.ball, progress: flight } : undefined,
-    rotation: rotation + Math.hypot(to.ball.x - from.ball.x, to.ball.y - from.ball.y) * flight * 9,
+    rotation: rotation + ballRollDegrees(from.ball, to.ball) * rollProgress,
+    rollDirection,
     loft: throwing ? Math.sin(Math.PI*flight)*0.3 : 0,
+    playerMotion: Object.fromEntries(from.players.map((player, index) => {
+      const target = destinations.get(player.key) ?? player
+      const dx = target.x - player.x, dy = target.y - player.y
+      const distance = Math.hypot(dx, dy * 0.65)
+      // Pose follows distance traveled, never an independent CSS clock.
+      // These are movement cues, not engine-authored sprint claims.
+      return [player.key, {
+        facing: Math.abs(dx) > 0.2 ? (dx > 0 ? 1 : -1) : from.direction[player.team],
+        activity: Math.min(1, distance / duration / 9) * 6 * progress * (1 - progress),
+        stride: Math.sin(distance * movement * 0.9 + index * 1.7),
+      } satisfies ReplayPlayerMotion]
+    })),
   }
 }

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Activity, ArrowRight, CircleDot, Play, Shield, Target, Trophy } from 'lucide-react'
-import type { OffsideDecision, ReplaySnapshot, TeamMatchStats } from '@footballsimsim/shared'
+import type { ReplaySnapshot, TeamMatchStats } from '@footballsimsim/shared'
 import type { MatchEvent, MatchResult } from './types'
 import { Header } from './App'
+import { MatchPitch } from './MatchPitch'
 import './MatchReplay.css'
 import { advanceReplayElapsed, matchClock, matchTimeline, playbackRemaining, replayFrame } from './replay'
 
@@ -70,7 +71,7 @@ export function MatchReplay({ result, onComplete, onHome }: { result: MatchResul
     <div className={`arena-layout ${inHalfTime?'half-time-break':''}`}>
       <section className="arena-field-card">
         <div className="arena-field-heading"><span><Activity size={16}/>{phase}</span><small>{inHalfTime ? 'Clock stopped · five-second interval' : complete ? 'Match complete' : `${possession} in possession`}</small></div>
-        <div className="pitch-stage">{snapshot && <LivePitch snapshot={snapshot} path={frame.path} rotation={frame.rotation} loft={frame.loft ?? 0} event={latest} celebration={goal?goalEvent:undefined} decision={inHalfTime?undefined:decisionEvent?.offside}/>}
+        <div className="pitch-stage">{snapshot && <MatchPitch snapshot={snapshot} frame={frame} minute={minute} event={latest} celebration={goal?goalEvent:undefined} decision={inHalfTime?undefined:decisionEvent?.offside} homeName={result.home.name} awayName={result.away.name}/>}
           {inHalfTime && <div className="half-time-overlay" role="status"><div><p>Half time</p><strong>{result.home.name} <span>{score[0]} : {score[1]}</span> {result.away.name}</strong><b>{Math.ceil(breakRemaining)}</b><small>{paused?'Break paused':`Second half in ${Math.ceil(breakRemaining)} seconds`}</small><span>Teams change ends. Time to regroup.</span></div></div>}
         </div>
         <div className={`play-insight ${goal ? 'goal-insight' : ''}`}>
@@ -91,37 +92,6 @@ export function MatchReplay({ result, onComplete, onHome }: { result: MatchResul
     </div>
     <section className="arena-commentary"><div className="section-heading"><h2>Match feed</h2><span>{events.length} actions played</span></div><p className="sr-only" aria-live="polite">{latest?.detail ?? 'Kick off'}</p><div className="arena-feed">{recent.length ? recent.map((event,index)=><article className={`feed-event ${event.team} ${event.type} ${index===0?'current':''}`} key={`${event.minute}-${events.length-index}`}><time>{matchClock(result,event.minute,event.snapshot?.period)}</time><span className="feed-symbol">{event.type==='goal'?<CircleDot/>:event.type==='shot'?<Target/>:event.type==='save'?<Shield/>:event.type==='yellow_card'||event.type==='red_card'?<i className={`discipline-card ${event.type}`}/>:<ArrowRight/>}</span><div><small>{event.team==='home'?result.home.name:result.away.name} · {event.type.replaceAll('_',' ')}</small><b>{event.detail}</b></div>{event.expectedGoals!==undefined && event.type==='shot' && <span className="xg-tag">{event.expectedGoals.toFixed(2)} xG</span>}</article>):<p className="feed-waiting">Waiting for the first play…</p>}</div></section>
   </main></div>
-}
-
-function LivePitch({snapshot,path,rotation,loft,event,celebration,decision}:{snapshot:ReplaySnapshot;path?:ReturnType<typeof replayFrame>['path'];rotation:number;loft:number;event?:MatchEvent;celebration?:MatchEvent;decision?:OffsideDecision}) {
-  // The ball position and every marker come from the engine's event snapshot.
-  return <div className={`live-pitch ${celebration?'pitch-goal':''}`} role="img" aria-label={`${phases[snapshot.phase]}. ${snapshot.possession==='HOME'?'Home':'Away'} possession. ${event?.detail ?? 'Kick off'}`}>
-    <div className="live-pitch-lines"><span className="half-line"/><span className="pitch-circle"/><span className="pitch-box left"/><span className="pitch-box right"/><span className="pitch-small-box left"/><span className="pitch-small-box right"/><span className="pitch-dot left"/><span className="pitch-dot right"/></div>
-    <span className="pitch-goal-net left"/><span className="pitch-goal-net right"/>
-    {path && <svg className="ball-path" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><line x1={path.from.x} y1={path.from.y} x2={path.to.x} y2={path.to.y} stroke={snapshot.possession==='HOME'?'#ffb0a0':'#e2edff'} strokeWidth="0.3" strokeDasharray="0.6 1.3" opacity={Math.sin(Math.PI * path.progress) * 0.6}/></svg>}
-    {decision && <div className={`offside-guide ${decision.offside?'flagged':'onside'}`} aria-label={`At the pass: ${decision.offside?'offside':'onside'}`}>
-      <span className="offside-line" style={{left:`${decision.lineX}%`}}/><span className="offside-receiver" style={{left:`${decision.receiver.x}%`,top:`${decision.receiver.y}%`}}/>
-      <span className="offside-verdict">At the pass · {decision.offside?'Offside':'Onside'}</span>
-    </div>}
-    {snapshot.restart && <span className="restart-location" style={{left:`${snapshot.restart.spot.x}%`,top:`${snapshot.restart.spot.y}%`}} aria-label={`${snapshot.restart.type.replaceAll('_',' ')} spot`}/>}
-    {snapshot.players.map(player=> {
-      const isActor = player.key===snapshot.carrierKey
-      const thrower = snapshot.restart?.type==='THROW_IN' && snapshot.restart.takerKey===player.key
-      return <div className={`live-player ${player.team.toLowerCase()} ${isActor?'on-ball':''} ${thrower?'thrower':''} ${thrower&&player.y>90?'at-bottom':''}`} style={{left:`${player.x}%`,top:`${player.y}%`}} key={player.key}>
-        <span className="shirt-marker">{thrower&&snapshot.restart?.ready&&<span className="thrower-hands"/>}{player.slotId}{player.yellowCards>0&&<i className="marker-card" title="Yellow card"/>}</span><span className="marker-name">{player.name}</span><span className="energy-track"><i style={{width:`${player.energy}%`}}/></span>
-      </div>
-    })}
-    <span className="match-ball" style={{left:`${snapshot.ball.x}%`,top:`${snapshot.ball.y}%`,transform:`translate(-50%,-50%) scale(${1+loft})`}}>
-      <svg className="football-sprite" viewBox="0 0 32 32" aria-hidden="true" style={{transform:`rotate(${rotation}deg)`}}>
-        <circle cx="16" cy="16" r="15" fill="#fffdf4" stroke="#272c2c" strokeWidth="1"/>
-        <path d="M16 9l6.6 4.8-2.5 7.8h-8.2l-2.5-7.8zM3 8l5 1-2 6-5-1M24 4l2 5 5 1-3-6M30 21l-5-1-3 6 4 3M9 28l1-5-6-3-2 5" fill="#242c30"/>
-        <path d="M16 9V1M22.6 13.8l6.6-4M20.1 21.6l4.8 7M11.9 21.6L7 28.6M9.4 13.8l-7-4" fill="none" stroke="#7a8381" strokeWidth=".8"/>
-        <circle cx="11" cy="9" r="5" fill="#ffffff" opacity=".35"/>
-      </svg>
-    </span>
-    {celebration && <div className="pitch-goal-banner"><strong>GOAL</strong><span>{celebration.player}</span></div>}
-    <div className="pitch-legend"><span><i/>Crimson</span><span><i/>Ivory</span><small>Attacking {snapshot.direction?.[snapshot.possession] === -1 ? '←' : '→'}</small></div>
-  </div>
 }
 
 function LiveStats({snapshot}:{snapshot:ReplaySnapshot}) {

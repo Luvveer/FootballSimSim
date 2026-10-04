@@ -92,13 +92,15 @@ function pitchRole(value: unknown, path: string, issues: string[]): PitchRole {
   return role as PitchRole;
 }
 
+const FORMATIONS = ["1-2-1", "2-1-1", "1-1-2", "2-0-2", "3-0-1"];
+
 function buildTeam(value: unknown, path: string, repository: PlayerRepository, issues: string[]): Team {
   const team = value && typeof value === "object" ? value as TeamSelection : {};
   const id = requiredString(team.id, `${path}.id`, issues);
   const name = requiredString(team.name, `${path}.name`, issues);
   const formation = requiredString(team.formation, `${path}.formation`, issues);
   if (name.length > 60) issues.push(`${path}.name must be 60 characters or fewer`);
-  if (formation && formation !== "1-2-1") issues.push(`${path}.formation must be 1-2-1`);
+  if (formation && !FORMATIONS.includes(formation)) issues.push(`${path}.formation must be one of ${FORMATIONS.join(", ")}`);
   const selections = Array.isArray(team.lineup) ? team.lineup as LineupSelection[] : [];
   if (!Array.isArray(team.lineup)) issues.push(`${path}.lineup must be an array`);
   if (selections.length !== TEAM_SIZE) issues.push(`${path}.lineup must contain exactly ${TEAM_SIZE} players`);

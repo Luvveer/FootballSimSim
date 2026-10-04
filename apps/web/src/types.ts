@@ -14,11 +14,12 @@ export type Player = {
   dribbling: number
   defending: number
   physical: number
+  gk?: { diving: number; reflexes: number; handling: number; speed: number; kicking: number; positioning: number }
   image?: string
 }
 
 export type Side = 'home' | 'away'
-export type Slot = 'ST' | 'LM' | 'RM' | 'GK' | 'CAM'
+export type Slot = string
 export type Lineup = Record<Slot, Player | null>
 
 export type MatchEvent = {
@@ -27,6 +28,7 @@ export type MatchEvent = {
   team: Side
   player: string
   playerId?: string
+  assistId?: string
   detail: string
   homeScore?: number
   awayScore?: number

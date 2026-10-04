@@ -77,6 +77,18 @@ function fallbackCsvPath(): string {
   return path.resolve(moduleDirectory, "../../../../test.csv");
 }
 
+const POSITION_GROUPS = new Set(["GK", "DEF", "MID", "ATT"]);
+const GROUP_BY_POSITION: Record<string, string> = {
+  GK: "GK",
+  CB: "DEF", LB: "DEF", RB: "DEF", LWB: "DEF", RWB: "DEF", SW: "DEF",
+  CDM: "MID", CM: "MID", CAM: "MID", LM: "MID", RM: "MID",
+  ST: "ATT", CF: "ATT", LW: "ATT", RW: "ATT", LF: "ATT", RF: "ATT", SS: "ATT",
+};
+
+function positionGroup(position: string): string {
+  return GROUP_BY_POSITION[position.trim().toLocaleUpperCase()] ?? "";
+}
+
 function normalizeSearch(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 }
@@ -84,7 +96,7 @@ function normalizeSearch(value: string): string {
 export class PlayerRepository {
   private readonly byHistoricalId = new Map<string, PlayerRecord>();
   private readonly byPlayerId = new Map<string, PlayerRecord[]>();
-  private readonly searchIndex: Array<{ record: PlayerRecord; text: string; positions: Set<string> }>;
+  private readonly searchIndex: Array<{ record: PlayerRecord; text: string; positions: Set<string>; group: string }>;
   private readonly availableVersions: string[];
 
   private constructor(private readonly records: PlayerRecord[]) {
@@ -102,6 +114,7 @@ export class PlayerRepository {
       text: normalizeSearch([record.short_name, record.long_name, record.club_name, record.nationality_name,
         record.fifa_version, `FIFA ${Number(record.fifa_version)}`, String(2000 + Number(record.fifa_version))].join(" ")),
       positions: new Set(record.player_positions.split(",").map((item) => item.trim().toLocaleUpperCase())),
+      group: positionGroup(record.player_positions.split(",")[0] ?? ""),
     }));
     this.availableVersions = [...new Set(records.map((player) => player.fifa_version))]
       .sort((a, b) => numeric(b) - numeric(a));
@@ -141,7 +154,7 @@ export class PlayerRepository {
     for (const indexed of this.searchIndex) {
       const matches = terms.every((term) => indexed.text.includes(term))
         && (!version || indexed.record.fifa_version === version)
-        && (!wantedPosition || indexed.positions.has(wantedPosition));
+        && (!wantedPosition || (POSITION_GROUPS.has(wantedPosition) ? indexed.group === wantedPosition : indexed.positions.has(wantedPosition)));
       if (!matches) continue;
       if (total >= offset && players.length < limit) players.push(indexed.record);
       total += 1;

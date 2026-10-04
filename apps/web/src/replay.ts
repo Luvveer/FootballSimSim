@@ -1,9 +1,12 @@
 import type { PitchPoint, ReplaySnapshot } from '@footballsimsim/shared'
 import type { MatchEvent, MatchResult } from './types'
 
+// One match minute plays back as one real second, so a 90+4 match lasts 94 seconds.
+export const replaySeconds = (result: MatchResult) => result.durationMinutes ?? 90
+
 export function matchTimeline(result: MatchResult, elapsed: number) {
-  const duration = result.durationMinutes ?? 90
-  const progress = Math.min(1, Math.max(0, elapsed / 60))
+  const duration = replaySeconds(result)
+  const progress = Math.min(1, Math.max(0, elapsed / duration))
   return { minute: progress * duration, progress, half: (result.halfTimeMinute ?? duration / 2) / duration }
 }
 

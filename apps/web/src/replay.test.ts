@@ -13,9 +13,9 @@ const event = (minute:number,x:number,type:MatchEvent['type']='pass'):MatchEvent
 describe('match playback timing',()=>{
   it('uses the same fraction for clock and progress, including added time',()=>{
     expect(matchTimeline(result,0)).toEqual({minute:0,progress:0,half:0.5})
-    expect(matchTimeline(result,30)).toEqual({minute:48,progress:0.5,half:0.5})
-    expect(matchTimeline(result,60)).toEqual({minute:96,progress:1,half:0.5})
-    expect(matchTimeline(result,100).progress).toBe(1)
+    expect(matchTimeline(result,48)).toEqual({minute:48,progress:0.5,half:0.5})
+    expect(matchTimeline(result,96)).toEqual({minute:96,progress:1,half:0.5})
+    expect(matchTimeline(result,200).progress).toBe(1)
   })
   it('displays stoppage time separately in both halves',()=>{
     expect(matchClock(result,7.5,1)).toBe('07:30')

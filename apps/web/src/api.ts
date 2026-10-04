@@ -1,4 +1,5 @@
 import { normalizePositions, type MatchResult as EngineMatchResult, type MatchEventType, type PitchRole, type TeamMatchStats } from '@footballsimsim/shared'
+import { apiUrl } from './api-url'
 import { FORMATIONS } from './formations'
 import type { Lineup, MatchEvent, MatchResult, Player } from './types'
 
@@ -46,7 +47,7 @@ export interface PlayerPage {
 }
 
 export async function fetchPlayerVersions(playerId: string, signal?: AbortSignal): Promise<Player[]> {
-  const response = await fetch(`/api/players/${encodeURIComponent(playerId)}/versions`, { signal })
+  const response = await fetch(apiUrl(`/players/${encodeURIComponent(playerId)}/versions`), { signal })
   if (!response.ok) throw new Error('Could not load this player\'s FIFA history.')
   const body = await response.json() as { players?: Record<string, unknown>[] }
   if (!Array.isArray(body.players)) throw new Error('The player history response is invalid.')
@@ -57,7 +58,7 @@ export async function fetchPlayers(query = '', position: PitchRole | 'ALL' = 'AL
   const params = new URLSearchParams({ limit: '40', offset: String(offset) })
   if (query.trim()) params.set('q', query.trim())
   if (position !== 'ALL') params.set('position', position)
-  const response = await fetch(`/api/players?${params}`, { signal })
+  const response = await fetch(apiUrl(`/players?${params}`), { signal })
   if (!response.ok) throw new Error('Could not load players from the API.')
   const body = await response.json() as { players?: Record<string, unknown>[]; total?: number; limit?: number; offset?: number }
   if (!Array.isArray(body.players)) throw new Error('The player response is invalid.')
@@ -77,7 +78,7 @@ export const lineupSelections = (lineup: Lineup, formation: string) => FORMATION
 }))
 
 export async function simulateMatch(homeName: string, awayName: string, home: Lineup, away: Lineup, homeFormation: string, awayFormation: string): Promise<MatchResult> {
-  const response = await fetch('/api/matches/simulate', {
+  const response = await fetch(apiUrl('/matches/simulate'), {
     method:'POST', headers:{ 'Content-Type':'application/json' },
     body: JSON.stringify({ seed: Date.now(), durationMinutes:90, homeTeam:{ id:'home', name:homeName, formation:homeFormation, lineup:lineupSelections(home, homeFormation) }, awayTeam:{ id:'away', name:awayName, formation:awayFormation, lineup:lineupSelections(away, awayFormation) } }),
   })

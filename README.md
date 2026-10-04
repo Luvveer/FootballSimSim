@@ -75,6 +75,18 @@ npm run dev
 
 Open `http://localhost:5173` in a browser. Vite forwards requests beginning with `/api` to the local Fastify server, so both development processes must be running to use the real player data and match engine. The frontend has demo fallback data, but that fallback should not be used to verify backend work.
 
+### Production API URL
+
+The web app uses the same-origin `/api` path by default. Leave the API URL unset when the production host forwards `/api` requests to the Fastify server.
+
+When the web app and API are hosted separately, set `VITE_API_BASE_URL` to the API's public origin or full path prefix before building the web app:
+
+```bash
+VITE_API_BASE_URL=https://api.example.com npm run build
+```
+
+For example, `VITE_API_BASE_URL=https://example.com/services/api` sends player requests to `https://example.com/services/api/players`. Vite embeds this value in the frontend bundle at build time, so changing it requires a new web build.
+
 The complete first-time setup order is:
 
 ```bash

@@ -23,7 +23,7 @@ export function Results({result,onReplay,onReset}:{result:MatchResult;onReplay:(
   const bestChances = homeXg >= awayXg ? result.home : result.away
   const insight = homeXg + awayXg > 0 ? `${bestChances.name} generated ${Math.max(homeXg,awayXg).toFixed(2)} expected goals from ${bestChances.stats.shots} shots.` : 'Every duel, pass and finish shaped the final score.'
 
-  return <div className="results-page report-page"><Header step="result"/><main className="report-main">
+  return <div className="results-page report-page"><Header step="result" onHome={onReset}/><main className="report-main">
     <div className="report-topline"><span><i/>{abandoned?'Abandoned':'Full time'} · {result.regulationMinutes ?? 90} minutes{result.addedTime && ` + ${result.addedTime.firstHalf + result.addedTime.secondHalf} added`}</span><small>Match report / 5-a-side</small></div>
     <section className="report-hero">
       <p className="eyebrow">{abandoned?'Match stopped':draw?'Honours even':'The final whistle'}</p>

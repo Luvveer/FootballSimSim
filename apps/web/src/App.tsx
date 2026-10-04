@@ -127,11 +127,19 @@ export function App() {
     }
   }
 
-  if (view === 'match' && result) return <MatchReplay result={result} onComplete={() => setView('result')} />
-  if (view === 'result' && result) return <Results result={result} onReplay={() => setView('match')} onReset={() => { setView('builder'); setResult(null) }} />
+  const returnToBuilder = () => {
+    if (view === 'builder') window.scrollTo({ top: 0, behavior: 'auto' })
+    setView('builder')
+    setResult(null)
+    setComparisonPlayer(null)
+    setMatchError(null)
+  }
+
+  if (view === 'match' && result) return <MatchReplay result={result} onComplete={() => setView('result')} onHome={returnToBuilder} />
+  if (view === 'result' && result) return <Results result={result} onReplay={() => setView('match')} onReset={returnToBuilder} />
 
   return <div className="app-shell">
-    <Header step="build" />
+    <Header step="build" onHome={returnToBuilder} />
     <main className="builder-main">
       <section className="intro-row">
         <div><p className="eyebrow">Build the impossible match</p><h1>Pick your five.</h1><p className="lede">Choose any era. Any position. Settle the argument on the pitch.</p></div>
@@ -154,8 +162,8 @@ export function App() {
   </div>
 }
 
-export function Header({ step }:{ step:'build'|'match'|'result' }) {
-  return <header className="topbar"><a className="brand" href="#" aria-label="FootballSimSim home"><span className="brand-mark"><CircleDot size={22}/></span><span>FOOTBALL<span>SIM</span>SIM</span></a><nav aria-label="Match progress"><span className={step==='build'?'current':''}>01 Build</span><i/><span className={step==='match'?'current':''}>02 Match</span><i/><span className={step==='result'?'current':''}>03 Results</span></nav><div className="format"><Gauge size={16}/><span>5v5 · 1 min = 1 sec</span></div></header>
+export function Header({ step,onHome }:{ step:'build'|'match'|'result';onHome:()=>void }) {
+  return <header className="topbar"><button type="button" className="brand" onClick={onHome} aria-label="FootballSimSim home"><span className="brand-mark"><CircleDot size={22}/></span><span>FOOTBALL<span>SIM</span>SIM</span></button><nav aria-label="Match progress"><span className={step==='build'?'current':''}>01 Build</span><i/><span className={step==='match'?'current':''}>02 Match</span><i/><span className={step==='result'?'current':''}>03 Results</span></nav><div className="format"><Gauge size={16}/><span>5v5 · 1 min = 1 sec</span></div></header>
 }
 
 function TeamHeader({side,name,formation,setName,active,onClick}:{side:Side;name:string;formation:string;setName:(name:string)=>void;active:boolean;onClick:()=>void}) {

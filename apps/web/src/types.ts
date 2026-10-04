@@ -1,6 +1,7 @@
 export type Player = {
   id: string
   name: string
+  fullName?: string
   version: string
   rating: number
   position: string

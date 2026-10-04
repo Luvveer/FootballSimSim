@@ -14,13 +14,13 @@ Install the following before starting:
 
 - Node.js 20 or newer
 - npm, which is included with Node.js
-- A local copy of the FIFA subset named `test.csv`
+- A local FIFA dataset named `male_players.csv`, or the smaller `test.csv` fixture
 
-`test.csv` is intentionally ignored by Git. Ask another team member for the current file and place it at the repository root:
+Both dataset filenames are intentionally ignored by Git. Ask another team member for the current file and place it at the repository root. The API prefers `male_players.csv` and falls back to `test.csv`:
 
 ```text
 FootballSimSim/
-  test.csv
+  male_players.csv
 ```
 
 Do not remove columns from the CSV. The API reads the original headers and expects, at minimum, player identity, FIFA version, position, and rating fields. The current fixture contains 10 records, including two goalkeepers.

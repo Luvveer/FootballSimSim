@@ -69,6 +69,11 @@ export function parsePlayers(csv: string): PlayerRecord[] {
 
 export function defaultCsvPath(): string {
   const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(moduleDirectory, "../../../../male_players.csv");
+}
+
+function fallbackCsvPath(): string {
+  const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
   return path.resolve(moduleDirectory, "../../../../test.csv");
 }
 
@@ -99,8 +104,14 @@ export class PlayerRepository {
       .sort((a, b) => numeric(b) - numeric(a));
   }
 
-  static async load(csvPath = defaultCsvPath()): Promise<PlayerRepository> {
-    return new PlayerRepository(parsePlayers(await readFile(csvPath, "utf8")));
+  static async load(csvPath?: string): Promise<PlayerRepository> {
+    if (csvPath) return new PlayerRepository(parsePlayers(await readFile(csvPath, "utf8")));
+    try {
+      return new PlayerRepository(parsePlayers(await readFile(defaultCsvPath(), "utf8")));
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+      return new PlayerRepository(parsePlayers(await readFile(fallbackCsvPath(), "utf8")));
+    }
   }
 
   all(): readonly PlayerRecord[] {

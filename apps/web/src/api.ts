@@ -2,8 +2,9 @@ import type { MatchResult as EngineMatchResult, MatchEventType, TeamMatchStats }
 import type { Lineup, MatchEvent, MatchResult, Player } from './types'
 
 const mapPlayer = (raw: Record<string, unknown>, index: number): Player => ({
-  id: String(raw.id ?? raw.playerId ?? raw.player_id ?? `${raw.name ?? raw.long_name}-${raw.version ?? raw.fifaVersion ?? index}`),
-  name: String(raw.name ?? raw.longName ?? raw.long_name ?? raw.short_name ?? 'Unknown player'),
+  id: String(raw.id ?? raw.playerId ?? raw.player_id ?? `${raw.name ?? raw.short_name}-${raw.version ?? raw.fifaVersion ?? index}`),
+  name: String(raw.name ?? raw.short_name ?? 'Unknown player'),
+  fullName: String(raw.fullName ?? raw.longName ?? raw.long_name ?? '') || undefined,
   version: String(raw.version ?? raw.fifaVersion ?? raw.fifa_version ?? 'FIFA'),
   rating: Number(raw.rating ?? raw.overall ?? 0),
   position: String(raw.position ?? (Array.isArray(raw.positions) ? raw.positions[0] : undefined) ?? raw.playerPositions ?? raw.player_positions ?? '—').split(',')[0],

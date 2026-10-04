@@ -1,5 +1,12 @@
 import type { MatchResult as EngineMatchResult, MatchEventType, TeamMatchStats } from '@footballsimsim/shared'
+import { FORMATIONS, positionGroup } from './formations'
 import type { Lineup, MatchEvent, MatchResult, Player } from './types'
+
+const mapGk = (raw: Record<string, unknown>): Player['gk'] => {
+  const g = (key: string) => Number(raw[`goalkeeping_${key}`] ?? (raw.gk as Record<string, unknown> | undefined)?.[key])
+  const gk = { diving: g('diving'), reflexes: g('reflexes'), handling: g('handling'), speed: g('speed'), kicking: g('kicking'), positioning: g('positioning') }
+  return Object.values(gk).every(Number.isFinite) ? gk : undefined
+}
 
 const mapPlayer = (raw: Record<string, unknown>, index: number): Player => ({
   id: String(raw.id ?? raw.playerId ?? raw.player_id ?? `${raw.name ?? raw.short_name}-${raw.version ?? raw.fifaVersion ?? index}`),
@@ -7,7 +14,7 @@ const mapPlayer = (raw: Record<string, unknown>, index: number): Player => ({
   fullName: String(raw.fullName ?? raw.longName ?? raw.long_name ?? '') || undefined,
   version: String(raw.version ?? raw.fifaVersion ?? raw.fifa_version ?? 'FIFA'),
   rating: Number(raw.rating ?? raw.overall ?? 0),
-  position: String(raw.position ?? (Array.isArray(raw.positions) ? raw.positions[0] : undefined) ?? raw.playerPositions ?? raw.player_positions ?? '—').split(',')[0],
+  position: String(raw.position ?? (Array.isArray(raw.positions) ? raw.positions[0] : undefined) ?? raw.playerPositions ?? raw.player_positions ?? '—').split(',').map(positionGroup)[0],
   club: String(raw.club ?? raw.clubName ?? raw.club_name ?? 'Free agent'),
   nationality: String(raw.nationality ?? raw.nationalityName ?? raw.nationality_name ?? 'Unknown'),
   pace: Number(raw.pace ?? raw.pac ?? (raw.attributes as Record<string,unknown>)?.pace ?? 0),
@@ -16,6 +23,7 @@ const mapPlayer = (raw: Record<string, unknown>, index: number): Player => ({
   dribbling: Number(raw.dribbling ?? raw.dri ?? (raw.attributes as Record<string,unknown>)?.dribbling ?? 0),
   defending: Number(raw.defending ?? raw.def ?? (raw.attributes as Record<string,unknown>)?.defending ?? 0),
   physical: Number(raw.physical ?? raw.phy ?? raw.physic ?? (raw.attributes as Record<string,unknown>)?.physical ?? 0), image: typeof raw.image === 'string' ? raw.image : undefined,
+  gk: mapGk(raw),
 })
 
 export interface PlayerPage {
@@ -49,17 +57,17 @@ export async function fetchPlayers(query = '', position = 'ALL', offset = 0, sig
   }
 }
 
-const selected = (lineup: Lineup) => Object.entries(lineup).map(([slotId, player]) => ({
-  slotId,
-  role: slotId === 'GK' ? 'GK' : slotId === 'ST' ? 'FWD' : 'MID',
-  playerId: player!.id,
-  fifaVersion: player!.version,
+const selected = (lineup: Lineup, formation: string) => FORMATIONS[formation].map(slot => ({
+  slotId: slot.id,
+  role: slot.role,
+  playerId: lineup[slot.id]!.id,
+  fifaVersion: lineup[slot.id]!.version,
 }))
 
-export async function simulateMatch(homeName: string, awayName: string, home: Lineup, away: Lineup): Promise<MatchResult> {
+export async function simulateMatch(homeName: string, awayName: string, home: Lineup, away: Lineup, homeFormation: string, awayFormation: string): Promise<MatchResult> {
   const response = await fetch('/api/matches/simulate', {
     method:'POST', headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify({ seed: Date.now(), durationMinutes:90, homeTeam:{ id:'home', name:homeName, formation:'1-2-1', lineup:selected(home) }, awayTeam:{ id:'away', name:awayName, formation:'1-2-1', lineup:selected(away) } }),
+    body: JSON.stringify({ seed: Date.now(), durationMinutes:90, homeTeam:{ id:'home', name:homeName, formation:homeFormation, lineup:selected(home, homeFormation) }, awayTeam:{ id:'away', name:awayName, formation:awayFormation, lineup:selected(away, awayFormation) } }),
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { issues?: string[] } | null
@@ -78,7 +86,7 @@ export async function simulateMatch(homeName: string, awayName: string, home: Li
       minute: event.minute, type: normalizeEventType(event.type), team: event.team === 'AWAY' ? 'away' : 'home',
       player: String(names.get(event.playerId) ?? ''), detail: event.description,
       homeScore: event.score.home, awayScore: event.score.away,
-      playerId: event.playerId, snapshot: event.snapshot, explanation: event.explanation, successful: event.successful, expectedGoals: event.expectedGoals,
+      playerId: event.playerId, assistId: event.secondaryPlayerId, snapshot: event.snapshot, explanation: event.explanation, successful: event.successful, expectedGoals: event.expectedGoals,
       offside: event.offside, restart: event.restart,
     })),
     playerRatings: raw.playerStats.map((player) => ({ player:player.playerName, playerId:player.playerId, team:player.team === 'AWAY' ? 'away' : 'home', rating:player.rating, yellowCards:player.yellowCards, redCards:player.redCards })),

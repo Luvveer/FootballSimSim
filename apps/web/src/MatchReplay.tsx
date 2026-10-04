@@ -2,23 +2,25 @@ import { useEffect, useState } from 'react'
 import { Activity, ArrowRight, CircleDot, Play, Shield, Target, Trophy } from 'lucide-react'
 import type { OffsideDecision, ReplaySnapshot, TeamMatchStats } from '@footballsimsim/shared'
 import type { MatchEvent, MatchResult } from './types'
+import { slotLabel } from './formations'
 import { Header } from './App'
 import './MatchReplay.css'
-import { matchClock, matchTimeline, replayFrame } from './replay'
+import { matchClock, matchTimeline, replayFrame, replaySeconds } from './replay'
 
 const phases = { BUILDUP: 'Building from the back', PROGRESSION: 'Moving through midfield', ATTACK: 'Pressure in the final third', SHOT: 'Chance at goal', GOAL: 'Goal!', RESTART: 'Set piece', HALF_TIME: 'Half time', FULL_TIME: 'Full time' }
 
 export function MatchReplay({ result, onComplete }: { result: MatchResult; onComplete: () => void }) {
+  const total = replaySeconds(result)
   const [elapsed, setElapsed] = useState(0)
   const [paused, setPaused] = useState(false)
   const [speed, setSpeed] = useState(1)
   useEffect(() => {
-    if (paused || elapsed >= 60) return
+    if (paused || elapsed >= total) return
     const startedAt = Date.now()
     const startedElapsed = elapsed
     let animation = 0
     const advance = () => {
-      setElapsed(Math.min(60, startedElapsed + (Date.now() - startedAt) / 1000 * speed))
+      setElapsed(Math.min(total, startedElapsed + (Date.now() - startedAt) / 1000 * speed))
     }
     const tick = () => {
       advance()
@@ -31,9 +33,9 @@ export function MatchReplay({ result, onComplete }: { result: MatchResult; onCom
     document.addEventListener('visibilitychange', advance)
     animation = window.requestAnimationFrame(tick)
     return () => { window.cancelAnimationFrame(animation); window.clearInterval(fallback); window.removeEventListener('focus', advance); document.removeEventListener('visibilitychange', advance) }
-  }, [paused, speed, elapsed >= 60])
+  }, [paused, speed, elapsed >= total])
   useEffect(() => {
-    if (elapsed < 60 || paused) return
+    if (elapsed < total || paused) return
     const timer = window.setTimeout(onComplete, 1800)
     return () => window.clearTimeout(timer)
   }, [elapsed, paused, onComplete])
@@ -47,16 +49,16 @@ export function MatchReplay({ result, onComplete }: { result: MatchResult; onCom
   const score = [latest?.homeScore ?? 0, latest?.awayScore ?? 0]
   const possession = snapshot?.possession === 'AWAY' ? result.away.name : result.home.name
   const goal = latest?.type === 'goal'
-  const phase = result.status === 'ABANDONED' && elapsed >= 60 ? 'Match abandoned' : elapsed >= 60 ? 'Full time' : goal ? 'Goal!' : snapshot ? phases[snapshot.phase] : 'Kick off'
+  const phase = result.status === 'ABANDONED' && elapsed >= total ? 'Match abandoned' : elapsed >= total ? 'Full time' : goal ? 'Goal!' : snapshot ? phases[snapshot.phase] : 'Kick off'
   const recent = [...events].reverse().slice(0, 20)
   const displayName = (event: MatchEvent) => result.initialSnapshot?.players.find(player => player.playerId===event.playerId && player.team===(event.team==='home'?'HOME':'AWAY'))?.name ?? event.player
   const scorers = events.filter(event => event.type === 'goal')
-  const periodLabel = snapshot?.status === 'HALF_TIME' ? 'HALF TIME' : elapsed >= 60 ? result.status === 'ABANDONED' ? 'ABANDONED' : 'FULL TIME' : snapshot?.period === 2 ? 'SECOND HALF' : 'FIRST HALF'
+  const periodLabel = snapshot?.status === 'HALF_TIME' ? 'HALF TIME' : elapsed >= total ? result.status === 'ABANDONED' ? 'ABANDONED' : 'FULL TIME' : snapshot?.period === 2 ? 'SECOND HALF' : 'FIRST HALF'
   const homeDirection = snapshot?.direction?.HOME ?? 1
   const finishedLabel = result.status === 'ABANDONED' ? 'Match abandoned' : 'Full time'
 
   return <div className="match-page arena-page"><Header step="match"/><main className="arena-main">
-    <div className="arena-topline"><span className="live-pill"><span/>{paused ? 'Replay paused' : elapsed >= 60 ? finishedLabel : 'Match in progress'}</span><span>5-a-side · Football rules</span></div>
+    <div className="arena-topline"><span className="live-pill"><span/>{paused ? 'Replay paused' : elapsed >= total ? finishedLabel : 'Match in progress'}</span><span>5-a-side · Football rules</span></div>
     <section className={`arena-scoreboard ${goal ? 'celebrating' : ''}`} aria-label="Scoreboard">
       <div className="arena-team home"><span className="arena-crest"><Shield/></span><div><small>Home · attacking {homeDirection === 1 ? '→' : '←'}</small><b>{result.home.name}</b></div></div>
       <div className="arena-score"><time>{matchClock(result, minute, snapshot?.period)}</time><strong>{score[0]} <i>:</i> {score[1]}</strong><span>{periodLabel}</span></div>
@@ -68,7 +70,7 @@ export function MatchReplay({ result, onComplete }: { result: MatchResult; onCom
     </div>
     <div className="arena-layout">
       <section className="arena-field-card">
-        <div className="arena-field-heading"><span><Activity size={16}/>{phase}</span><small>{elapsed >= 60 ? 'Match complete' : `${possession} in possession`}</small></div>
+        <div className="arena-field-heading"><span><Activity size={16}/>{phase}</span><small>{elapsed >= total ? 'Match complete' : `${possession} in possession`}</small></div>
         {snapshot && <LivePitch snapshot={snapshot} path={frame.path} rotation={frame.rotation} event={latest} decision={decisionEvent?.offside}/>}
         <div className={`play-insight ${goal ? 'goal-insight' : ''}`}>
           <span className="insight-icon">{goal ? <Trophy/> : latest?.type === 'shot' || latest?.type === 'save' ? <Target/> : <Activity/>}</span>
@@ -77,7 +79,7 @@ export function MatchReplay({ result, onComplete }: { result: MatchResult; onCom
         <div className="arena-controls">
           <button className="replay-toggle" onClick={()=>setPaused(value=>!value)} aria-label={paused?'Resume match':'Pause match'}>{paused?<Play size={16}/>:<span className="pause-icon"/>}{paused?'Resume':'Pause'}</button>
           <div className="replay-speed" role="group" aria-label="Replay speed">{[0.5,1,2].map(value=><button key={value} aria-pressed={speed===value} className={speed===value?'active':''} onClick={()=>setSpeed(value)}>{value}×</button>)}</div>
-          <span className="replay-time">{Math.ceil((60-elapsed)/speed)}s remaining</span>
+          <span className="replay-time">{Math.ceil((total-elapsed)/speed)}s remaining</span>
         </div>
         <div className="arena-scorers">{scorers.length ? scorers.map((event,index)=><span key={index} className={event.team}><CircleDot size={12}/>{displayName(event)} {matchClock(result,event.minute,event.snapshot?.period)}</span>) : <span>The opening goal is still to come</span>}</div>
       </section>
@@ -104,7 +106,7 @@ function LivePitch({snapshot,path,rotation,event,decision}:{snapshot:ReplaySnaps
     {snapshot.players.map(player=> {
       const isActor = player.playerId===event?.playerId && player.team===(event.team==='home'?'HOME':'AWAY') || (player.team===snapshot.possession && Math.abs(player.x-snapshot.ball.x)<1 && Math.abs(player.y+4-snapshot.ball.y)<1)
       return <div className={`live-player ${player.team.toLowerCase()} ${isActor?'on-ball':''}`} style={{left:`${player.x}%`,top:`${player.y}%`}} key={player.key}>
-        <span className="shirt-marker">{player.slotId}{player.yellowCards>0&&<i className="marker-card" title="Yellow card"/>}</span><span className="marker-name">{player.name}</span><span className="energy-track"><i style={{width:`${player.energy}%`}}/></span>
+        <span className="shirt-marker">{slotLabel(player.slotId)}{player.yellowCards>0&&<i className="marker-card" title="Yellow card"/>}</span><span className="marker-name">{player.name}</span><span className="energy-track"><i style={{width:`${player.energy}%`}}/></span>
       </div>
     })}
     <span className="match-ball" style={{left:`${snapshot.ball.x}%`,top:`${snapshot.ball.y}%`}}>

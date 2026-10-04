@@ -1,3 +1,4 @@
+import { versionLabel } from './version-label'
 import { useEffect, useRef, useState } from 'react'
 import { GitCompareArrows, X } from 'lucide-react'
 import { fetchPlayerVersions } from './api'
@@ -37,4 +38,4 @@ function RadarChart({first,second,metrics}:{first:Player;second:Player;metrics:P
   return <figure className="radar"><svg viewBox="0 0 300 300" role="img" aria-labelledby="radar-title radar-desc"><title id="radar-title">Radar chart comparing {first.name} in {formatVersion(first.version)} and {formatVersion(second.version)}</title><desc id="radar-desc">Only attributes recorded for both editions are plotted. Exact values are listed beside the chart.</desc>{[25,50,75,100].map(value=><polygon className="radar-grid" points={ring(value)} key={value}/>)}{plotted.map((metric,index)=><line className="radar-axis" x1={center} y1={center} x2={point(index,100).split(',')[0]} y2={point(index,100).split(',')[1]} key={metric.key}/>)}<polygon className="radar-shape first" points={plotted.map((metric,index)=>point(index,metric.value(first)!)).join(' ')}/><polygon className="radar-shape second" points={plotted.map((metric,index)=>point(index,metric.value(second)!)).join(' ')}/>{plotted.map((metric,index)=>{const[x,y]=point(index,118).split(',');return<text x={x} y={y} textAnchor="middle" dominantBaseline="middle" key={metric.key}>{metric.abbreviation}</text>})}</svg><figcaption><span className="legend-first">{formatVersion(first.version)}</span><span className="legend-second">{formatVersion(second.version)}</span></figcaption></figure>
 }
 
-const formatVersion=(version:string)=>version.toUpperCase().startsWith('FIFA')?version:`FIFA ${version}`
+const formatVersion=versionLabel

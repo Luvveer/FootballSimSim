@@ -17,6 +17,8 @@ export type Player = {
   defending: number
   physical: number
   gk?: { diving?: number; reflexes?: number; handling?: number; speed?: number; kicking?: number; positioning?: number }
+  attributes?: { finishing?: number; positioning?: number; penalties?: number; ballControl?: number; vision?: number; composure?: number; reactions?: number; agility?: number; stamina?: number; strength?: number; interceptions?: number; standingTackle?: number; aggression?: number }
+  profile?: { age?: number; heightCm?: number; weightKg?: number; foot?: string; jersey?: number; bodyType?: string; weakFoot?: number; skillMoves?: number; reputation?: number; workRate?: string }
   image?: string
 }
 

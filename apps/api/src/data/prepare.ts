@@ -3,12 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { normalizePosition, normalizePositions } from "@footballsimsim/shared";
 import { iterateCsv } from "./csv.js";
-import { COMPACT_PLAYER_COLUMNS } from "./player-schema.js";
+import { COMPACT_PLAYER_COLUMNS, OPTIONAL_PLAYER_COLUMNS } from "./player-schema.js";
 
 export { COMPACT_PLAYER_COLUMNS } from "./player-schema.js";
 
 const SOURCE_COLUMNS = [
-  ...COMPACT_PLAYER_COLUMNS.filter((column) => column !== "player_roles"),
+  ...COMPACT_PLAYER_COLUMNS.filter((column) => column !== "player_roles" && !OPTIONAL_PLAYER_COLUMNS.includes(column)),
   "player_positions",
   "fifa_update",
   "update_as_of",
